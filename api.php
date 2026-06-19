@@ -299,38 +299,52 @@ function citesApiQuery(string $name, string $token): array {
     $ch  = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ["X-Authentication-Token: $token"],
-        CURLOPT_TIMEOUT        => 12,
+        CURLOPT_HTTPHEADER     => ["X-Authentication-Token: $token", "Accept: application/json"],
+        CURLOPT_TIMEOUT        => 15,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
-    $body = curl_exec($ch);
-    $err  = curl_error($ch);
+    $body   = curl_exec($ch);
+    $err    = curl_error($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($err) return ['error' => $err];
-    $data = json_decode($body, true);
-    if (!isset($data['taxon_concepts'])) return ['error' => 'Unexpected response'];
 
+    if ($err) return ['error' => $err];
+    if ($status !== 200) return ['error' => "API HTTP $status", 'raw' => substr($body, 0, 300)];
+
+    $data = json_decode($body, true);
+    if (!isset($data['taxon_concepts'])) {
+        return ['error' => 'Unexpected response', 'raw' => substr($body, 0, 300)];
+    }
+
+    // Hledáme přijatý taxon (name_status=A) se shodným jménem
+    $accepted = null;
     foreach ($data['taxon_concepts'] as $tc) {
         if (strcasecmp($tc['full_name'] ?? '', $name) !== 0) continue;
-        if (($tc['name_status'] ?? '') !== 'A') continue;
-        return [
-            'appendix'        => $tc['cites_listing'] ?? '',
-            'taxon_id'        => $tc['id'] ?? null,
-            'scientific_name' => $tc['full_name'] ?? '',
-            'rank'            => $tc['rank'] ?? '',
-        ];
+        if (($tc['name_status'] ?? '') === 'A') { $accepted = $tc; break; }
     }
-    // fallback: first result regardless of name_status
-    if (!empty($data['taxon_concepts'])) {
-        $tc = $data['taxon_concepts'][0];
-        return [
-            'appendix'        => $tc['cites_listing'] ?? '',
-            'taxon_id'        => $tc['id'] ?? null,
-            'scientific_name' => $tc['full_name'] ?? '',
-            'rank'            => $tc['rank'] ?? '',
-        ];
+    // Fallback: první výsledek bez ohledu na name_status
+    if ($accepted === null && !empty($data['taxon_concepts'])) {
+        $accepted = $data['taxon_concepts'][0];
     }
-    return ['appendix' => ''];
+    if ($accepted === null) return ['appendix' => '', 'note' => 'not found'];
+
+    // cites_listing je null pro split-listed taxony — sestavíme ho z cites_listings[]
+    $listing = $accepted['cites_listing'] ?? null;
+    if ($listing === null || $listing === '') {
+        $parts = [];
+        foreach ($accepted['cites_listings'] ?? [] as $l) {
+            $app = $l['appendix'] ?? '';
+            if ($app !== '' && !in_array($app, $parts, true)) $parts[] = $app;
+        }
+        $listing = implode('/', $parts);
+    }
+
+    return [
+        'appendix'        => $listing,
+        'taxon_id'        => $accepted['id'] ?? null,
+        'scientific_name' => $accepted['full_name'] ?? '',
+        'rank'            => $accepted['rank'] ?? '',
+    ];
 }
 
 function citesLookup(array $env): array {
@@ -352,7 +366,7 @@ function citesUpdateAll(PDO $db, array $env): array {
         $db->prepare('UPDATE `zootrack_species` SET cites_appendix=? WHERE id=?')
            ->execute([$res['appendix'], $sp['id']]);
         $updated++;
-        usleep(300000);
+        usleep(1200000);
     }
     return ['ok' => true, 'updated' => $updated, 'errors' => $errors];
 }

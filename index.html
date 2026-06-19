@@ -961,9 +961,9 @@ async function lookupCites() {
   btn.textContent = '…'; btn.disabled = true;
   var r = await api('cites_lookup', {name: name});
   btn.textContent = 'Dohledat ›'; btn.disabled = false;
-  if (r.error) { alert('Chyba CITES API: ' + r.error); return; }
+  if (r.error) { alert('Chyba CITES API: ' + r.error + (r.raw ? '\n\nRaw: ' + r.raw : '')); return; }
   sv('sm-cites', r.appendix || '');
-  if (!r.appendix) alert('Druh nebyl v CITES databázi nalezen (příloha zůstala prázdná).');
+  if (!r.appendix) alert('Druh nebyl v CITES databázi nalezen — příloha zůstala prázdná.\n(note: ' + (r.note||'') + ')');
 }
 
 async function citesUpdateAll() {
