@@ -362,7 +362,7 @@ function citesUpdateAll(PDO $db, array $env): array {
     $updated = 0; $errors = [];
     foreach ($species as $sp) {
         $res = citesApiQuery($sp['scientific_name'], $token);
-        if (isset($res['error'])) { $errors[] = $sp['scientific_name'].': '.$res['error']; continue; }
+        if (isset($res['error'])) { $errors[] = $sp['scientific_name'].': '.$res['error'].' | raw: '.($res['raw']??'–'); continue; }
         $db->prepare('UPDATE `zootrack_species` SET cites_appendix=? WHERE id=?')
            ->execute([$res['appendix'], $sp['id']]);
         $updated++;
