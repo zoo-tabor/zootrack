@@ -56,6 +56,9 @@ button,input,select,textarea{font:inherit;cursor:pointer}
 table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:760px;background:var(--surface)}
 th,td{border-bottom:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
 th{position:sticky;top:0;z-index:5;background:#f6f9fa;font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;color:#3a4b54;white-space:nowrap}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{background:#eaf0f2}
+th.sortable::after{content:' ⇅';opacity:.35;font-size:9px}
+th.sort-asc::after{content:' ▲';opacity:1}th.sort-desc::after{content:' ▼';opacity:1}
 tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{background:#e4f3f1;box-shadow:inset 3px 0 0 var(--teal)}
 .cm{display:grid;gap:1px}.cn{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cs{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ev-cell{font-size:11px;color:var(--muted);margin-top:3px}
@@ -203,11 +206,11 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{backgroun
         <table>
           <thead><tr>
             <th style="width:32px">#</th>
-            <th style="width:185px">Instituce</th>
-            <th style="width:115px">Stát / Město</th>
-            <th style="width:72px">EAZA</th>
-            <th style="width:130px">Typ</th>
-            <th style="width:44px">Data</th>
+            <th style="width:185px" class="sortable" data-col="institution">Instituce</th>
+            <th style="width:115px" class="sortable" data-col="country">Stát / Město</th>
+            <th style="width:72px"  class="sortable" data-col="eaza_status">EAZA</th>
+            <th style="width:130px" class="sortable" data-col="institution_type">Typ</th>
+            <th style="width:44px"  class="sortable" data-col="holding_count">Data</th>
             <th>Evidence</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
@@ -519,7 +522,7 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{backgroun
 </div>
 
 <script>
-var state = { page:1, per:50, total:0, pages:0, instList:[], selId:null, species:[], holdingFromSpeciesModal:false, holdingsCache:{}, spView:'grid' };
+var state = { page:1, per:50, total:0, pages:0, instList:[], selId:null, species:[], holdingFromSpeciesModal:false, holdingsCache:{}, spView:'grid', sort:'', dir:'ASC', spSort:'scientific_name', spDir:'ASC' };
 
 async function api(action, params, body) {
   var url = new URL('api.php', window.location.href);
@@ -552,6 +555,18 @@ function eazaChip(v) { return (!v) ? chip('gray','?') : (v.indexOf('EAZA')===0 ?
 async function init() {
   await Promise.all([loadStats(), loadCountries(), loadSpeciesList()]);
   loadInst(1);
+  document.querySelectorAll('th.sortable').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var col = th.dataset.col;
+      if (state.sort === col) {
+        state.dir = state.dir === 'ASC' ? 'DESC' : 'ASC';
+      } else {
+        state.sort = col;
+        state.dir = 'ASC';
+      }
+      loadInst(1);
+    });
+  });
 }
 
 async function loadStats() {
@@ -615,6 +630,12 @@ function setSpView(v) {
   renderSpeciesView();
 }
 
+function spSortClick(col) {
+  if (state.spSort === col) state.spDir = state.spDir === 'ASC' ? 'DESC' : 'ASC';
+  else { state.spSort = col; state.spDir = 'ASC'; }
+  renderSpeciesView();
+}
+
 function renderSpeciesView() {
   var q = (g('sp-q') ? g('sp-q').value : '').toLowerCase();
   var list = state.species.filter(function(s) {
@@ -623,17 +644,34 @@ function renderSpeciesView() {
            (s.common_name_cs||'').toLowerCase().indexOf(q) >= 0 ||
            (s.common_name_en||'').toLowerCase().indexOf(q) >= 0;
   });
+  // sort
+  list = list.slice().sort(function(a, b) {
+    var col = state.spSort;
+    var av = col === 'holding_count' ? parseInt(a[col]||0) : (a[col]||'').toString().toLowerCase();
+    var bv = col === 'holding_count' ? parseInt(b[col]||0) : (b[col]||'').toString().toLowerCase();
+    if (av < bv) return state.spDir === 'ASC' ? -1 : 1;
+    if (av > bv) return state.spDir === 'ASC' ?  1 : -1;
+    return 0;
+  });
+  function spTh(label, col, style) {
+    var asc  = state.spSort===col && state.spDir==='ASC';
+    var desc = state.spSort===col && state.spDir==='DESC';
+    var arrow = asc ? ' ▲' : desc ? ' ▼' : ' ⇅';
+    var opacity = (asc||desc) ? '1' : '.35';
+    return '<th style="cursor:pointer;user-select:none;'+(style||'')+'" onclick="spSortClick(\''+col+'\')">'
+      +label+'<span style="font-size:9px;opacity:'+opacity+'">'+arrow+'</span></th>';
+  }
   var grid = g('sp-grid');
   if (state.spView === 'list') {
     grid.style.display = 'block';
     grid.innerHTML =
       '<table style="width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden">'+
       '<thead><tr>'+
-        '<th style="width:220px">Vědecký název</th>'+
-        '<th style="width:160px">Česky / Anglicky</th>'+
-        '<th style="width:80px">Třída</th>'+
-        '<th style="width:110px">Přílohy / EEP</th>'+
-        '<th style="width:70px;text-align:center">Inst.</th>'+
+        spTh('Vědecký název',  'scientific_name', 'width:220px')+
+        spTh('Česky / Anglicky','common_name_cs',  'width:160px')+
+        spTh('Třída',          'taxon_class',     'width:80px')+
+        spTh('Přílohy / EEP', 'cites_appendix',  'width:110px')+
+        spTh('Inst.',          'holding_count',   'width:70px;text-align:center')+
         '<th style="width:70px"></th>'+
       '</tr></thead><tbody>'+
       list.map(function(s) {
@@ -696,7 +734,8 @@ async function loadInst(page) {
   var d = await api('institutions', {
     page:state.page, per:state.per,
     q:gv('q'), country:gv('f-country'), eaza:gv('f-eaza'),
-    species_id:sid, breeding:sid?gv('f-breed'):''
+    species_id:sid, breeding:sid?gv('f-breed'):'',
+    sort:state.sort, dir:state.dir
   });
   state.instList=d.items||[]; state.total=d.total||0; state.pages=d.pages||0; state.page=d.page||1;
   g('tloading').classList.remove('on');
@@ -707,6 +746,10 @@ async function loadInst(page) {
 function renderTable() {
   var offset = (state.page-1)*state.per;
   g('tcount').textContent = state.total+' záznamů';
+  document.querySelectorAll('th.sortable').forEach(function(th) {
+    th.classList.toggle('sort-asc',  state.sort===th.dataset.col && state.dir==='ASC');
+    th.classList.toggle('sort-desc', state.sort===th.dataset.col && state.dir==='DESC');
+  });
   g('no-results').style.display = state.instList.length?'none':'block';
   var hasSp = !!gv('f-species');
 

@@ -95,6 +95,17 @@ function getInstitutions(PDO $db): array {
     $sid     = (int)($_GET['species_id'] ?? 0);
     $breed   = trim($_GET['breeding']    ?? '');
 
+    $sortMap = [
+        'institution'      => 'i.institution',
+        'country'          => 'i.country, i.city, i.institution',
+        'eaza_status'      => 'i.eaza_status, i.country, i.institution',
+        'institution_type' => 'i.institution_type, i.country, i.institution',
+        'holding_count'    => 'holding_count',
+    ];
+    $sortKey = trim($_GET['sort'] ?? '');
+    $sortDir = strtoupper(trim($_GET['dir'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
+    $orderBy = isset($sortMap[$sortKey]) ? $sortMap[$sortKey].' '.$sortDir : 'i.country, i.city, i.institution';
+
     $w = ['1=1']; $p = [];
     if ($q) {
         $w[] = "(i.institution LIKE :q OR i.city LIKE :q OR i.institution_aliases LIKE :q OR i.id LIKE :q)";
@@ -131,7 +142,7 @@ function getInstitutions(PDO $db): array {
                    (SELECT COUNT(*) FROM `zootrack_holdings` h WHERE h.institution_id=i.id) as holding_count
                    $hCols
             FROM `zootrack_institutions` i $hJoin WHERE $where
-            ORDER BY i.country, i.city, i.institution
+            ORDER BY $orderBy
             LIMIT :per OFFSET :offset";
 
     $stmt = $db->prepare($sql);
