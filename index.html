@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZooTrack</title>
+<style>
+:root {
+  --bg:#f2f5f7;--surface:#fff;--s2:#eef2f5;--line:#dce3e8;--line2:#bcc8d0;
+  --text:#1c2428;--muted:#5c6b73;
+  --teal:#0d7f77;--teal2:#d5eeec;
+  --blue:#2460e0;--blue2:#dbeafe;
+  --amber:#b07318;--amber2:#fef3cd;
+  --red:#b42018;--red2:#ffe4e0;
+  --green:#1a7845;--green2:#d8f4e5;
+  --violet:#6422cc;--violet2:#ede9fe;
+  --r:8px;--shadow:0 8px 28px rgba(20,30,38,.08);
+  --font:"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+button,input,select,textarea{font:inherit;cursor:pointer}
+
+.topbar{position:sticky;top:0;z-index:40;background:rgba(242,245,247,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.topbar-inner{max-width:1640px;margin:0 auto;padding:0 20px;height:54px;display:flex;align-items:center;gap:16px}
+.logo{font-size:18px;font-weight:800;white-space:nowrap;letter-spacing:-.3px}
+.logo span{color:var(--teal)}
+.spacer{flex:1}
+.topstats{display:flex;gap:14px}
+.topstat{font-size:12px;color:var(--muted);white-space:nowrap}
+.topstat strong{color:var(--text);font-weight:700}
+
+.main{max-width:1640px;margin:0 auto;padding:16px 20px 32px;display:grid;gap:14px}
+
+.filters{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.filter-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.sw{position:relative;flex:1 1 220px}
+.sw input{width:100%;border:1px solid var(--line2);border-radius:var(--r);padding:7px 10px 7px 32px;min-height:34px;background:#fff;color:var(--text)}
+.sw svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.ff{display:grid;gap:3px;flex:1 1 150px}
+.ff label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ff select{border:1px solid var(--line2);border-radius:var(--r);padding:6px 8px;min-height:34px;background:#fff;color:var(--text)}
+.ff select:disabled{opacity:.45;cursor:not-allowed;background:var(--s2)}
+.rbtn{padding:6px 12px;border:1px solid var(--line2);border-radius:var(--r);background:#fff;color:var(--muted);min-height:34px;align-self:flex-end}
+.rbtn:hover{border-color:var(--teal);color:var(--teal)}
+
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:14px;align-items:start}
+@media(max-width:960px){.cgrid{grid-template-columns:1fr}}
+
+.tpanel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.thead{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);background:#fafbfc}
+.thead-title{font-size:13px;font-weight:700}
+.tcount{font-size:12px;color:var(--muted)}
+.twrap{overflow:auto;max-height:calc(100vh - 290px);min-height:380px}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:760px;background:var(--surface)}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+th{position:sticky;top:0;z-index:5;background:#f6f9fa;font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;color:#3a4b54;white-space:nowrap}
+tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{background:#e4f3f1;box-shadow:inset 3px 0 0 var(--teal)}
+.cm{display:grid;gap:1px}.cn{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cs{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-cell{font-size:11px;color:var(--muted);margin-top:3px}
+.no-results{padding:40px 20px;text-align:center;color:var(--muted)}
+.loading{display:none;text-align:center;padding:40px;color:var(--muted)}
+.loading.on{display:block}
+
+.pag{padding:10px 14px;display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);background:#fafbfc;flex-wrap:wrap}
+.pag-btn{padding:4px 10px;border:1px solid var(--line2);border-radius:6px;background:#fff;color:var(--text);font-size:12px}
+.pag-btn:hover{border-color:var(--teal);color:var(--teal)}
+.pag-btn.cur{background:var(--teal);color:#fff;border-color:var(--teal)}
+.pag-btn:disabled{opacity:.4;cursor:default}
+.pag-info{font-size:12px;color:var(--muted);margin-left:auto}
+
+.chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+.chip.green{background:var(--green2);color:#0f5c33;border-color:#a8e0c0}
+.chip.teal{background:var(--teal2);color:#085e58;border-color:#a8d8d4}
+.chip.blue{background:var(--blue2);color:#1a3ab0;border-color:#bfdbfe}
+.chip.amber{background:var(--amber2);color:#7a4d08;border-color:#f0d07a}
+.chip.red{background:var(--red2);color:#8f1d14;border-color:#ffc5bd}
+.chip.violet{background:var(--violet2);color:#4e1b9a;border-color:#d8d0fc}
+.chip.gray{background:#eef1f3;color:#52616a;border-color:#d0d8dc}
+.chip.sm{font-size:10px;padding:1px 6px}
+
+.detail{position:sticky;top:70px;max-height:calc(100vh - 88px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.d-empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:13px}
+.d-body{padding:15px;display:grid;gap:13px}
+.d-id{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.07em}
+.d-name{font-size:17px;font-weight:800;line-height:1.2;margin-top:2px}
+.d-loc{font-size:12px;color:var(--muted);margin-top:2px}
+.crow{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.dsec{display:grid;gap:5px}
+.dsec h3{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.dtext{font-size:12px;color:#2c373d;white-space:pre-wrap}
+.link-sm{font-size:11px;word-break:break-all}
+
+.holding-card{border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:grid;gap:5px}
+.hc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.hc-name{font-weight:700;font-size:13px}
+.hc-name small{font-weight:400;font-size:11px;color:var(--muted)}
+.hc-btns{display:flex;gap:4px;flex-shrink:0}
+.icon-btn{width:28px;height:28px;border:1px solid var(--line2);border-radius:6px;background:#fff;color:var(--muted);display:inline-grid;place-items:center;font-size:14px}
+.icon-btn:hover{border-color:var(--teal);color:var(--teal)}
+.icon-btn.del:hover{border-color:var(--red);color:var(--red)}
+.hc-chips{display:flex;flex-wrap:wrap;gap:4px}
+.hc-ev{font-size:11px;color:var(--muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.add-btn{display:flex;align-items:center;gap:6px;width:100%;padding:9px 12px;border:1px dashed var(--line2);border-radius:6px;background:transparent;color:var(--teal);font-weight:600;font-size:13px;justify-content:center}
+.add-btn:hover{border-color:var(--teal);background:var(--teal2)}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(20,30,38,.4);z-index:100;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.18);width:100%;max-width:560px}
+.modal-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal-head h2{font-size:16px;font-weight:800}
+.modal-close{width:30px;height:30px;border:none;background:none;font-size:20px;color:var(--muted);display:grid;place-items:center;border-radius:6px}
+.modal-close:hover{background:var(--s2)}
+.modal-body{padding:16px 18px;display:grid;gap:12px;overflow-y:auto;max-height:calc(100vh - 200px)}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fgroup{display:grid;gap:4px}
+.fgroup label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.fgroup input,.fgroup select,.fgroup textarea{border:1px solid var(--line2);border-radius:6px;padding:7px 9px;background:#fff;color:var(--text);width:100%}
+.fgroup textarea{min-height:70px;resize:vertical}
+.fgroup input:focus,.fgroup select:focus,.fgroup textarea:focus{outline:none;border-color:var(--teal)}
+.cb-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.cb-row input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+.sp-select-row{display:flex;gap:8px}
+.sp-select-row select{flex:1}
+.nav{display:flex;gap:2px;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden;background:var(--s2)}
+.nav button{border:none;background:transparent;padding:6px 16px;font-weight:600;font-size:13px;color:var(--muted)}
+.nav button.active{background:var(--teal);color:#fff}
+.sp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.sp-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;box-shadow:var(--shadow)}
+.sp-card:hover{border-color:var(--teal)}
+.sp-sci{font-style:italic;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-common{font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.sp-add-card{border:1px dashed var(--line2);background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--teal);font-weight:600;min-height:110px;cursor:pointer}
+.sp-add-card:hover{border-color:var(--teal);background:var(--teal2)}
+.btn{padding:8px 18px;border:none;border-radius:6px;font-weight:700;font-size:13px}
+.btn-primary{background:var(--teal);color:#fff}.btn-primary:hover{background:#0a6b64}
+.btn-ghost{background:var(--s2);color:var(--muted)}.btn-ghost:hover{background:var(--line)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">Zoo<span>Track</span></div>
+    <div class="nav">
+      <button id="nav-inst" class="active" onclick="switchView('institutions')">Instituce</button>
+      <button id="nav-sp"   onclick="switchView('species')">Druhy</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="topstats" id="topstats"></div>
+    <a href="https://vetapp.zootabor.eu" style="padding:6px 14px;border:1px solid var(--line2);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--muted);background:#fff;white-space:nowrap">VetApp</a>
+  </div>
+</div>
+
+<div id="view-institutions">
+<div class="main">
+  <div class="filters">
+    <div class="filter-row">
+      <div class="sw">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+        <input id="q" type="search" placeholder="Hledat instituci, město…" oninput="onSearch()">
+      </div>
+      <div class="ff"><label>Stát</label><select id="f-country" onchange="loadInst(1)"><option value="">Všechny</option></select></div>
+      <div class="ff"><label>EAZA</label>
+        <select id="f-eaza" onchange="loadInst(1)">
+          <option value="">Vše</option><option value="EAZA">EAZA</option><option value="non">non-EAZA</option>
+        </select>
+      </div>
+      <div class="ff"><label>Druh</label>
+        <select id="f-species" onchange="onSpeciesChange()"><option value="">– vyberte druh –</option></select>
+      </div>
+      <div class="ff"><label>Chov</label>
+        <select id="f-breed" onchange="loadInst(1)" disabled>
+          <option value="">Vše</option>
+          <option value="confirmed">Potvrzen odchov</option>
+          <option value="likely">Pravděpodobný</option>
+          <option value="no_evidence">Bez evidence</option>
+          <option value="historical">Historicky</option>
+          <option value="unknown">Neznámo</option>
+        </select>
+      </div>
+      <button class="rbtn" onclick="resetFilters()">Resetovat</button>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-primary" onclick="openInstModal()">+ Přidat instituci</button>
+    <button class="btn btn-primary" onclick="openSpeciesModal(null,false)">+ Přidat druh</button>
+    <button class="btn btn-ghost" id="cites-all-btn" onclick="citesUpdateAll()" style="margin-left:auto">&#x21BB; Aktualizovat CITES</button>
+  </div>
+
+  <div class="cgrid">
+    <div class="tpanel">
+      <div class="thead">
+        <span class="thead-title">Instituce</span>
+        <span class="tcount" id="tcount"></span>
+      </div>
+      <div class="loading" id="tloading">Načítám…</div>
+      <div class="twrap" id="twrap">
+        <table>
+          <thead><tr>
+            <th style="width:32px">#</th>
+            <th style="width:185px">Instituce</th>
+            <th style="width:115px">Stát / Město</th>
+            <th style="width:72px">EAZA</th>
+            <th style="width:130px">Typ</th>
+            <th style="width:44px">Data</th>
+            <th>Evidence</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="no-results" id="no-results" style="display:none">Žádné výsledky.</div>
+      </div>
+      <div class="pag" id="pag"></div>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="d-empty">Klikněte na řádek pro zobrazení detailu.</div>
+    </div>
+  </div>
+</div>
+</div><!-- /#view-institutions -->
+
+<!-- SPECIES VIEW -->
+<div id="view-species" style="display:none">
+  <div class="main">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <h2 style="font-size:15px;font-weight:700">Druhy</h2>
+      <div style="position:relative;flex:1 1 200px;max-width:320px">
+        <svg style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+        <input id="sp-q" type="search" placeholder="Hledat druh…" oninput="renderSpeciesView()" style="width:100%;border:1px solid var(--line2);border-radius:var(--r);padding:7px 10px 7px 32px;background:#fff">
+      </div>
+      <div style="margin-left:auto;display:flex;gap:2px;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden;background:var(--s2)">
+        <button id="sp-view-grid" onclick="setSpView('grid')" title="Dlaždice" style="border:none;background:var(--teal);color:#fff;padding:6px 10px;cursor:pointer">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        </button>
+        <button id="sp-view-list" onclick="setSpView('list')" title="Seznam" style="border:none;background:transparent;color:var(--muted);padding:6px 10px;cursor:pointer">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="12" x2="15" y2="12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="sp-grid" id="sp-grid"></div>
+  </div>
+</div>
+
+<!-- INSTITUTION MODAL -->
+<div class="overlay" id="inst-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="im-title">Přidat instituci</h2>
+      <button class="modal-close" onclick="closeModal('inst')">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="im-mode">
+      <div class="form-row">
+        <div class="fgroup">
+          <label>ID instituce *</label>
+          <input type="text" id="im-id" placeholder="např. B02-1500">
+        </div>
+        <div class="fgroup">
+          <label>Stát *</label>
+          <input type="text" id="im-country" placeholder="Czech Republic">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>Kraj / oblast</label>
+          <input type="text" id="im-subdivision" placeholder="Jihomoravský kraj">
+        </div>
+        <div class="fgroup">
+          <label>Město *</label>
+          <input type="text" id="im-city" placeholder="Brno">
+        </div>
+      </div>
+      <div class="fgroup">
+        <label>Název instituce *</label>
+        <input type="text" id="im-name" placeholder="Zoo Brno">
+      </div>
+      <div class="fgroup">
+        <label>Alternativní názvy (oddělené ;)</label>
+        <input type="text" id="im-aliases" placeholder="Zoologická zahrada Brno; ZOO Brno">
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>Typ instituce</label>
+          <select id="im-type">
+            <option value="">– nevyplněno –</option>
+            <option value="public zoological collection">public zoological collection</option>
+            <option value="zoo">zoo</option>
+            <option value="zoo or animal park">zoo or animal park</option>
+            <option value="wildlife park">wildlife park</option>
+            <option value="bird park">bird park</option>
+            <option value="safari park">safari park</option>
+            <option value="rescue centre">rescue centre</option>
+            <option value="wildlife rescue centre">wildlife rescue centre</option>
+            <option value="farm park">farm park</option>
+            <option value="aquarium">aquarium</option>
+            <option value="other">other</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>EAZA status</label>
+          <select id="im-eaza">
+            <option value="non-EAZA">non-EAZA</option>
+            <option value="EAZA - Full member">EAZA - Full member</option>
+            <option value="EAZA - Candidate for Membership">EAZA - Candidate for Membership</option>
+            <option value="EAZA - Associate member">EAZA - Associate member</option>
+          </select>
+        </div>
+      </div>
+      <div class="fgroup">
+        <label>Web</label>
+        <input type="url" id="im-web" placeholder="https://www.zoo-brno.cz">
+      </div>
+      <div class="fgroup">
+        <label>Ostatní členství (WAZA, IZE, …)</label>
+        <input type="text" id="im-memberships">
+      </div>
+      <div class="fgroup">
+        <label>Poznámky</label>
+        <textarea id="im-notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('inst')">Zrušit</button>
+      <button class="btn btn-primary" onclick="submitInst()">Uložit instituci</button>
+    </div>
+  </div>
+</div>
+
+<!-- HOLDING MODAL -->
+<div class="overlay" id="holding-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="hm-title">Přidat záznam</h2>
+      <button class="modal-close" onclick="closeModal('holding')">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="hm-id">
+      <input type="hidden" id="hm-inst-id">
+      <div class="fgroup">
+        <label>Druh *</label>
+        <div class="sp-select-row">
+          <select id="hm-species"></select>
+          <button class="btn btn-ghost" onclick="openSpeciesModal(null,true)">+ Nový druh</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>Přítomnost</label>
+          <select id="hm-holding">
+            <option value="confirmed_current">Potvrzena</option>
+            <option value="likely_current">Pravděpodobná</option>
+            <option value="historical">Historicky</option>
+            <option value="not_current">Nepřítomni</option>
+            <option value="unknown" selected>Neznámo</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>Pohlaví / počty (2.3.0)</label>
+          <input type="text" id="hm-sex" placeholder="samci.samice.neurceni">
+        </div>
+      </div>
+      <div class="fgroup">
+        <label>Poznámka k počtu</label>
+        <input type="text" id="hm-count" placeholder="např. min. 2 jedinci…">
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>Chov</label>
+          <select id="hm-breeding">
+            <option value="confirmed">Potvrzen odchov</option>
+            <option value="likely">Pravděpodobný</option>
+            <option value="no_evidence" selected>Bez evidence</option>
+            <option value="historical">Historicky</option>
+            <option value="unknown">Neznámo</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>Rok posledního odchovu</label>
+          <input type="text" id="hm-year" placeholder="např. 2024">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>Spolehlivost</label>
+          <select id="hm-conf">
+            <option value="high">Vysoká</option>
+            <option value="medium" selected>Střední</option>
+            <option value="low">Nízká</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>Typ zdroje</label>
+          <select id="hm-src-type">
+            <option value="website">Web instituce</option>
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+            <option value="zims">ZIMS</option>
+            <option value="zootierliste">Zootierliste.de</option>
+            <option value="zoochat">ZooChat</option>
+            <option value="visitor_report">Zpráva návštěvníka</option>
+            <option value="direct_contact">Přímý kontakt</option>
+            <option value="other">Jiné</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>URL zdroje</label>
+          <input type="url" id="hm-url" placeholder="https://…">
+        </div>
+        <div class="fgroup">
+          <label>Datum zjištění</label>
+          <input type="date" id="hm-date">
+        </div>
+      </div>
+      <div class="fgroup">
+        <label>Popis evidence</label>
+        <textarea id="hm-evid" placeholder="Co přesně bylo zjištěno…"></textarea>
+      </div>
+      <div class="fgroup">
+        <label>Poznámky (interní)</label>
+        <textarea id="hm-notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('holding')">Zrušit</button>
+      <button class="btn btn-primary" onclick="submitHolding()">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPECIES MODAL -->
+<div class="overlay" id="species-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="sm-title">Přidat druh</h2>
+      <button class="modal-close" onclick="closeModal('species')">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sm-id">
+      <div class="fgroup">
+        <label>Vědecký název *</label>
+        <input type="text" id="sm-sci" placeholder="Nestor notabilis">
+      </div>
+      <div class="form-row">
+        <div class="fgroup"><label>Název česky</label><input type="text" id="sm-cs"></div>
+        <div class="fgroup"><label>Název anglicky</label><input type="text" id="sm-en"></div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup"><label>Název německy</label><input type="text" id="sm-de"></div>
+        <div class="fgroup">
+          <label>Třída</label>
+          <select id="sm-class">
+            <option value="Aves">Aves (ptáci)</option>
+            <option value="Mammalia">Mammalia (savci)</option>
+            <option value="Reptilia">Reptilia (plazi)</option>
+            <option value="Amphibia">Amphibia (obojživelníci)</option>
+            <option value="Actinopterygii">Actinopterygii (ryby)</option>
+            <option value="Insecta">Insecta (hmyz)</option>
+            <option value="other">Jiné</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup"><label>Řád</label><input type="text" id="sm-order" placeholder="Psittaciformes"></div>
+        <div class="fgroup"><label>Čeleď</label><input type="text" id="sm-family" placeholder="Nestoridae"></div>
+      </div>
+      <div class="form-row">
+        <div class="fgroup">
+          <label>IUCN status</label>
+          <select id="sm-iucn">
+            <option value="">–</option>
+            <option value="EX">EX – Vyhynulý</option>
+            <option value="EW">EW – Vyhynulý v přírodě</option>
+            <option value="CR">CR – Kriticky ohrožený</option>
+            <option value="EN">EN – Ohrožený</option>
+            <option value="VU">VU – Zranitelný</option>
+            <option value="NT">NT – Téměř ohrožený</option>
+            <option value="LC">LC – Málo dotčený</option>
+          </select>
+        </div>
+        <div class="fgroup">
+          <label>CITES příloha</label>
+          <div style="display:flex;gap:6px">
+            <input id="sm-cites" type="text" placeholder="např. II nebo III/NC" style="flex:1" list="cites-options">
+            <datalist id="cites-options">
+              <option value="">–</option>
+              <option value="I">
+              <option value="II">
+              <option value="III">
+              <option value="I/II">
+              <option value="I/NC">
+              <option value="II/NC">
+              <option value="III/NC">
+            </datalist>
+            <button class="btn btn-ghost" id="sm-cites-btn" onclick="lookupCites()" title="Dohledat přílohu CITES dle vědeckého názvu" style="white-space:nowrap;padding:6px 10px;font-size:12px">Dohledat ›</button>
+          </div>
+        </div>
+      </div>
+      <div class="cb-row">
+        <input type="checkbox" id="sm-eep">
+        <label for="sm-eep">EEP / ESB spravovaný druh</label>
+      </div>
+      <div class="fgroup">
+        <label>Poznámky</label>
+        <textarea id="sm-notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('species')">Zrušit</button>
+      <button class="btn btn-primary" onclick="submitSpecies()">Uložit druh</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var state = { page:1, per:50, total:0, pages:0, instList:[], selId:null, species:[], holdingFromSpeciesModal:false, holdingsCache:{}, spView:'grid' };
+
+async function api(action, params, body) {
+  var url = new URL('api.php', window.location.href);
+  url.searchParams.set('action', action);
+  for (var k in (params||{})) { if (params[k]!==''&&params[k]!==null&&params[k]!==undefined) url.searchParams.set(k, params[k]); }
+  var opts = {};
+  if (body) { opts.method='POST'; opts.headers={'Content-Type':'application/json'}; opts.body=JSON.stringify(body); }
+  return (await fetch(url, opts)).json();
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function g(id) { return document.getElementById(id); }
+function gv(id) { return g(id).value; }
+function sv(id,v) { g(id).value = v||''; }
+
+var HLBL = {confirmed_current:'Potvrzena',likely_current:'Pravděpodobná',historical:'Historicky',not_current:'Nepřítomni',unclear:'Nejasná',unknown:'Neznámo'};
+var BLBL = {confirmed:'Potvrzen odchov',likely:'Pravděpodobný',no_evidence:'Bez evidence',historical:'Historicky',unknown:'Neznámo'};
+var CLBL = {high:'Vysoká',medium:'Střední',low:'Nízká'};
+var HCOL = {confirmed_current:'green',likely_current:'teal',historical:'violet',not_current:'red',unclear:'amber',unknown:'gray'};
+var BCOL = {confirmed:'green',likely:'teal',no_evidence:'gray',historical:'violet',unknown:'gray'};
+var CCOL = {high:'green',medium:'amber',low:'red'};
+var SRC  = {website:'Web',facebook:'FB',instagram:'IG',zims:'ZIMS',zootierliste:'Zootierliste',zoochat:'ZooChat',visitor_report:'Návštěvník',direct_contact:'Přímý kontakt',other:'Jiné'};
+
+function chip(cls,txt) { return '<span class="chip '+cls+'">'+esc(txt)+'</span>'; }
+function hchip(v) { return chip(HCOL[v]||'gray', HLBL[v]||v||'–'); }
+function bchip(v) { return chip(BCOL[v]||'gray', BLBL[v]||v||'–'); }
+function cchip(v) { return chip(CCOL[v]||'gray', CLBL[v]||v||'–'); }
+function eazaChip(v) { return (!v) ? chip('gray','?') : (v.indexOf('EAZA')===0 ? chip('teal','EAZA') : chip('gray','non-EAZA')); }
+
+async function init() {
+  await Promise.all([loadStats(), loadCountries(), loadSpeciesList()]);
+  loadInst(1);
+}
+
+async function loadStats() {
+  var d = await api('stats');
+  g('topstats').innerHTML =
+    '<div class="topstat"><strong>'+d.total+'</strong> institucí</div>'+
+    '<div class="topstat"><strong>'+d.with_data+'</strong> s daty</div>'+
+    '<div class="topstat"><strong>'+d.sp_count+'</strong> druhů</div>'+
+    '<div class="topstat"><strong>'+d.h_count+'</strong> záznamů</div>';
+}
+
+async function loadCountries() {
+  var list = await api('countries');
+  var sel = g('f-country');
+  sel.innerHTML = '<option value="">Všechny</option>';
+  list.forEach(function(c) { var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o); });
+}
+
+async function loadSpeciesList() {
+  state.species = await api('species');
+  var fSel = g('f-species');
+  fSel.innerHTML = '<option value="">– vyberte druh –</option>';
+  state.species.forEach(function(s) {
+    var o=document.createElement('option'); o.value=s.id;
+    o.textContent = s.scientific_name + (s.common_name_cs?' / '+s.common_name_cs:'');
+    fSel.appendChild(o);
+  });
+  refreshHoldingSpeciesSelect();
+}
+
+function refreshHoldingSpeciesSelect() {
+  var sel = g('hm-species');
+  sel.innerHTML = '<option value="">-- vyberte druh --</option>';
+  state.species.forEach(function(s) {
+    var o=document.createElement('option'); o.value=s.id;
+    o.textContent = s.scientific_name + (s.common_name_cs?' / '+s.common_name_cs:'');
+    sel.appendChild(o);
+  });
+}
+
+function switchView(v) {
+  g('view-institutions').style.display = v === 'institutions' ? '' : 'none';
+  g('view-species').style.display      = v === 'species'      ? '' : 'none';
+  g('nav-inst').classList.toggle('active', v === 'institutions');
+  g('nav-sp').classList.toggle('active',   v === 'species');
+  if (v === 'species') renderSpeciesView();
+}
+
+var IUCN_COL = {EX:'red',EW:'red',CR:'red',EN:'amber',VU:'amber',NT:'blue',LC:'green'};
+function iucnChip(v) { return v ? chip((IUCN_COL[v]||'gray')+' sm', v) : ''; }
+function citesChip(v) { return v ? chip('gray sm','CITES '+v) : ''; }
+function eepChip(v)   { return parseInt(v||0) ? chip('blue sm','EEP') : ''; }
+
+function setSpView(v) {
+  state.spView = v;
+  var grid = g('sp-view-grid'), list = g('sp-view-list');
+  grid.style.background = v === 'grid' ? 'var(--teal)' : 'transparent';
+  grid.style.color      = v === 'grid' ? '#fff' : 'var(--muted)';
+  list.style.background = v === 'list' ? 'var(--teal)' : 'transparent';
+  list.style.color      = v === 'list' ? '#fff' : 'var(--muted)';
+  renderSpeciesView();
+}
+
+function renderSpeciesView() {
+  var q = (g('sp-q') ? g('sp-q').value : '').toLowerCase();
+  var list = state.species.filter(function(s) {
+    if (!q) return true;
+    return (s.scientific_name||'').toLowerCase().indexOf(q) >= 0 ||
+           (s.common_name_cs||'').toLowerCase().indexOf(q) >= 0 ||
+           (s.common_name_en||'').toLowerCase().indexOf(q) >= 0;
+  });
+  var grid = g('sp-grid');
+  if (state.spView === 'list') {
+    grid.style.display = 'block';
+    grid.innerHTML =
+      '<table style="width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden">'+
+      '<thead><tr>'+
+        '<th style="width:220px">Vědecký název</th>'+
+        '<th style="width:160px">Česky / Anglicky</th>'+
+        '<th style="width:80px">Třída</th>'+
+        '<th style="width:110px">Přílohy / EEP</th>'+
+        '<th style="width:70px;text-align:center">Inst.</th>'+
+        '<th style="width:70px"></th>'+
+      '</tr></thead><tbody>'+
+      list.map(function(s) {
+        var names = [s.common_name_cs, s.common_name_en].filter(Boolean).join(' / ');
+        var sData = JSON.stringify(s).replace(/"/g,'&quot;');
+        return '<tr style="cursor:default">'+
+          '<td><i style="font-weight:600">'+esc(s.scientific_name)+'</i></td>'+
+          '<td style="font-size:12px;color:var(--muted)">'+esc(names)+'</td>'+
+          '<td style="font-size:12px;color:var(--muted)">'+esc(s.taxon_class||'')+'</td>'+
+          '<td>'+iucnChip(s.iucn_status)+' '+citesChip(s.cites_appendix)+' '+eepChip(s.eep)+'</td>'+
+          '<td style="text-align:center;font-size:12px">'+parseInt(s.holding_count||0)+'</td>'+
+          '<td><button class="btn btn-ghost" style="font-size:11px;padding:3px 10px" data-sp="'+sData+'" onclick="openSpeciesModal(JSON.parse(this.dataset.sp),false)">Upravit</button></td>'+
+        '</tr>';
+      }).join('')+
+      '</tbody></table>'+
+      '<div style="margin-top:10px"><button class="add-btn" onclick="openSpeciesModal(null,false)">+ Přidat druh</button></div>';
+  } else {
+    grid.style.display = '';
+    grid.innerHTML = list.map(function(s) {
+      var names = [s.common_name_cs, s.common_name_en].filter(Boolean).join(' · ');
+      var sData = JSON.stringify(s).replace(/"/g,'&quot;');
+      return '<div class="sp-card">'+
+        '<div class="sp-sci">'+esc(s.scientific_name)+'</div>'+
+        (names ? '<div class="sp-common">'+esc(names)+'</div>' : '')+
+        '<div class="sp-badges">'+iucnChip(s.iucn_status)+citesChip(s.cites_appendix)+eepChip(s.eep)+'</div>'+
+        '<div style="margin-top:8px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">'+parseInt(s.holding_count||0)+'</strong> institucí s daty</div>'+
+        '<div style="margin-top:8px">'+
+          '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" data-sp="'+sData+'" onclick="openSpeciesModal(JSON.parse(this.dataset.sp),false)">Upravit</button>'+
+        '</div>'+
+      '</div>';
+    }).join('') +
+    '<div class="sp-card sp-add-card" onclick="openSpeciesModal(null,false)">'+
+      '<div style="font-size:28px">+</div><div>Přidat druh</div>'+
+    '</div>';
+  }
+}
+
+function onSpeciesChange() {
+  var sid = gv('f-species');
+  var breedSel = g('f-breed');
+  breedSel.disabled = !sid;
+  if (!sid) breedSel.value = '';
+  loadInst(1);
+}
+
+var searchTimer = null;
+function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(function(){ loadInst(1); }, 280); }
+
+function resetFilters() {
+  sv('q',''); sv('f-country',''); sv('f-eaza',''); sv('f-species',''); sv('f-breed','');
+  g('f-breed').disabled = true;
+  loadInst(1);
+}
+
+async function loadInst(page) {
+  state.page = page||1;
+  g('tloading').classList.add('on');
+  g('twrap').style.opacity = '.4';
+  var sid = gv('f-species');
+  var d = await api('institutions', {
+    page:state.page, per:state.per,
+    q:gv('q'), country:gv('f-country'), eaza:gv('f-eaza'),
+    species_id:sid, breeding:sid?gv('f-breed'):''
+  });
+  state.instList=d.items||[]; state.total=d.total||0; state.pages=d.pages||0; state.page=d.page||1;
+  g('tloading').classList.remove('on');
+  g('twrap').style.opacity='1';
+  renderTable(); renderPagination();
+}
+
+function renderTable() {
+  var offset = (state.page-1)*state.per;
+  g('tcount').textContent = state.total+' záznamů';
+  g('no-results').style.display = state.instList.length?'none':'block';
+  var hasSp = !!gv('f-species');
+
+  g('tbody').innerHTML = state.instList.map(function(r,i) {
+    var hc = parseInt(r.holding_count||0);
+    var hcBadge = hc>0 ? chip('teal sm',''+hc) : chip('gray sm','–');
+    var evCell = '';
+    if (hasSp && r.holding_verdict) {
+      var srcLabel = SRC[r.source_type]||r.source_type||'';
+      var dateStr  = r.evidence_date ? r.evidence_date.slice(0,7) : '';
+      var meta = [srcLabel,dateStr].filter(Boolean).join(' · ');
+      var evSnip = r.evidence_summary ? esc(r.evidence_summary.slice(0,90))+(r.evidence_summary.length>90?'…':'') : '';
+      evCell = hchip(r.holding_verdict)+' '+bchip(r.breeding_verdict||'unknown')+
+        (meta?'<div class="ev-cell">'+esc(meta)+'</div>':'')+
+        (evSnip?'<div class="ev-cell">'+evSnip+'</div>':'');
+    } else if (!hasSp && hc>0) {
+      evCell = '<span style="font-size:11px;color:var(--muted)">'+hc+' druhů</span>';
+    }
+    return '<tr data-id="'+esc(r.id)+'"'+(r.id===state.selId?' class="sel"':'')+'>'+
+      '<td style="color:var(--muted);font-size:11px">'+(offset+i+1)+'</td>'+
+      '<td><div class="cm"><div class="cn">'+esc(r.institution)+'</div><div class="cs">'+esc(r.id)+'</div></div></td>'+
+      '<td><div class="cm"><div class="cn">'+esc(r.country)+'</div><div class="cs">'+esc(r.city)+'</div></div></td>'+
+      '<td>'+eazaChip(r.eaza_status)+'</td>'+
+      '<td><div class="cs" style="font-size:11px">'+esc(r.institution_type||'')+'</div></td>'+
+      '<td style="text-align:center">'+hcBadge+'</td>'+
+      '<td>'+evCell+'</td>'+
+      '</tr>';
+  }).join('');
+
+  g('tbody').querySelectorAll('tr').forEach(function(tr) {
+    tr.addEventListener('click', function(){ selectInst(tr.dataset.id); });
+  });
+}
+
+function renderPagination() {
+  var pag = g('pag');
+  if (state.pages<=1){pag.innerHTML='';return;}
+  var h='';
+  h+='<button class="pag-btn" onclick="loadInst('+Math.max(1,state.page-1)+')" '+(state.page<=1?'disabled':'')+'>&#x2039; Předchozí</button>';
+  var s=Math.max(1,state.page-2), e=Math.min(state.pages,s+4);
+  if(s>1) h+='<button class="pag-btn" onclick="loadInst(1)">1</button>'+(s>2?'<span style="padding:0 4px;color:var(--muted)">…</span>':'');
+  for(var p=s;p<=e;p++) h+='<button class="pag-btn'+(p===state.page?' cur':'')+'" onclick="loadInst('+p+')">'+p+'</button>';
+  if(e<state.pages) h+=(e<state.pages-1?'<span style="padding:0 4px;color:var(--muted)">…</span>':'')+'<button class="pag-btn" onclick="loadInst('+state.pages+')">'+state.pages+'</button>';
+  h+='<button class="pag-btn" onclick="loadInst('+Math.min(state.pages,state.page+1)+')" '+(state.page>=state.pages?'disabled':'')+'>Další &#x203A;</button>';
+  h+='<span class="pag-info">stránka '+state.page+' z '+state.pages+' ('+state.total+')</span>';
+  pag.innerHTML=h;
+}
+
+async function selectInst(id) {
+  state.selId = id;
+  g('tbody').querySelectorAll('tr').forEach(function(tr){ tr.classList.toggle('sel', tr.dataset.id===id); });
+  g('detail').innerHTML = '<div class="d-empty">Načítám…</div>';
+  var r = await api('institution', {id:id});
+  renderDetail(r);
+}
+
+function renderDetail(r) {
+  if(r.error){g('detail').innerHTML='<div class="d-empty">'+esc(r.error)+'</div>';return;}
+  var holdings = r.holdings||[];
+  // cache holdings by id so onclick can reference safely
+  state.holdingsCache = {};
+  holdings.forEach(function(h){ state.holdingsCache[h.id] = h; });
+  var instId = r.id;
+  var hHtml = holdings.map(function(h) {
+    var srcParts = [];
+    if(h.source_type) srcParts.push(SRC[h.source_type]||h.source_type);
+    if(h.evidence_date) srcParts.push(h.evidence_date.slice(0,10));
+    var srcMeta = srcParts.length ? '<div style="font-size:11px;color:var(--muted)">'+esc(srcParts.join(' · '))+'</div>' : '';
+    var evDiv = h.evidence_summary ? '<div class="hc-ev">'+esc(h.evidence_summary)+'</div>' : '';
+    var srcLink = h.source_url ? '<a class="link-sm" href="'+esc(h.source_url)+'" target="_blank" rel="noopener">'+esc(h.source_url)+'</a>' : '';
+    return '<div class="holding-card">'+
+      '<div class="hc-top">'+
+        '<div class="hc-name"><i>'+esc(h.scientific_name)+'</i>'+(h.common_name_cs?'<small> / '+esc(h.common_name_cs)+'</small>':'')+'</div>'+
+        '<div class="hc-btns">'+
+          '<button class="icon-btn" onclick="openHoldingById('+h.id+')" title="Upravit">&#x270E;</button>'+
+          '<button class="icon-btn del" onclick="delHolding('+h.id+',\''+esc(r.id)+'\')" title="Smazat">&#x2715;</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="hc-chips">'+hchip(h.holding_verdict)+bchip(h.breeding_verdict)+cchip(h.confidence)+
+        (h.last_offspring_year?chip('violet sm','Rok: '+h.last_offspring_year):'')+
+        (h.sex_ratio?chip('gray sm',h.sex_ratio):'')+
+      '</div>'+
+      srcMeta+evDiv+srcLink+
+    '</div>';
+  }).join('');
+
+  var webLink = r.website ? '<a href="'+esc(r.website)+'" target="_blank" rel="noopener" class="link-sm">'+esc(r.website)+'</a>' : '';
+  var instDataStr = esc(r.id);
+  g('detail').innerHTML =
+    '<div class="d-body">'+
+    '<div>'+
+      '<div class="d-id">'+esc(r.id)+'</div>'+
+      '<div class="d-name">'+esc(r.institution)+'</div>'+
+      '<div class="d-loc">'+esc(r.city)+(r.subdivision?', '+esc(r.subdivision):'')+', '+esc(r.country)+'</div>'+
+      '<div class="crow" style="margin-top:6px">'+eazaChip(r.eaza_status)+(r.institution_type?chip('gray sm',r.institution_type):'')+'</div>'+
+      (webLink?'<div style="margin-top:6px">'+webLink+'</div>':'')+
+    '</div>'+
+    '<hr style="border:none;border-top:1px solid var(--line)">'+
+    '<div class="dsec">'+
+      '<h3>Záznamy o druzích ('+holdings.length+')</h3>'+
+      (hHtml||'<p class="dtext" style="color:var(--muted)">Zatím žádné záznamy.</p>')+
+      '<button class="add-btn" onclick="openHoldingModal(null,\''+instDataStr+'\')">+ Přidat druh</button>'+
+    '</div>'+
+    (r.notes?'<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Poznámky</h3><p class="dtext">'+esc(r.notes)+'</p></div>':'')+
+    '</div>';
+}
+
+function openHoldingById(hid) {
+  var h = state.holdingsCache[hid];
+  if (!h) return;
+  openHoldingModal(h, state.selId);
+}
+
+function openHoldingModal(holding, instId) {
+  g('hm-title').textContent = holding ? 'Upravit záznam' : 'Přidat záznam';
+  sv('hm-id', holding ? holding.id : '');
+  sv('hm-inst-id', instId);
+  sv('hm-species',  holding ? holding.species_id : '');
+  sv('hm-holding',  holding ? (holding.holding_verdict||'unknown') : 'unknown');
+  sv('hm-sex',      holding ? holding.sex_ratio : '');
+  sv('hm-count',    holding ? holding.count_note : '');
+  sv('hm-breeding', holding ? (holding.breeding_verdict||'no_evidence') : 'no_evidence');
+  sv('hm-year',     holding ? holding.last_offspring_year : '');
+  sv('hm-conf',     holding ? (holding.confidence||'medium') : 'medium');
+  sv('hm-src-type', holding ? (holding.source_type||'website') : 'website');
+  sv('hm-url',      holding ? holding.source_url : '');
+  sv('hm-date',     holding ? holding.evidence_date : '');
+  sv('hm-evid',     holding ? holding.evidence_summary : '');
+  sv('hm-notes',    holding ? holding.notes : '');
+  g('holding-overlay').classList.add('open');
+}
+
+async function submitHolding() {
+  var spid = parseInt(gv('hm-species'));
+  if (!spid) { alert('Vyberte druh.'); return; }
+  var body = {
+    id: parseInt(gv('hm-id'))||0,
+    institution_id: gv('hm-inst-id'),
+    species_id: spid,
+    holding_verdict:     gv('hm-holding'),
+    sex_ratio:           gv('hm-sex'),
+    count_note:          gv('hm-count'),
+    breeding_verdict:    gv('hm-breeding'),
+    last_offspring_year: gv('hm-year'),
+    confidence:          gv('hm-conf'),
+    source_type:         gv('hm-src-type'),
+    source_url:          gv('hm-url'),
+    evidence_date:       gv('hm-date'),
+    evidence_summary:    gv('hm-evid'),
+    notes:               gv('hm-notes'),
+  };
+  var r = await api('save_holding', {}, body);
+  if (r.error) { alert('Chyba: '+r.error); return; }
+  closeModal('holding');
+  await selectInst(body.institution_id);
+  loadStats();
+}
+
+async function delHolding(hid, instId) {
+  if (!confirm('Smazat tento záznam?')) return;
+  await api('delete_holding', {}, {id:hid});
+  await selectInst(instId);
+  loadStats();
+}
+
+function openSpeciesModal(sp, fromHolding) {
+  state.holdingFromSpeciesModal = !!fromHolding;
+  g('sm-title').textContent = sp ? 'Upravit druh' : 'Přidat druh';
+  sv('sm-id',     sp ? sp.id : '');
+  sv('sm-sci',    sp ? sp.scientific_name : '');
+  sv('sm-cs',     sp ? sp.common_name_cs : '');
+  sv('sm-en',     sp ? sp.common_name_en : '');
+  sv('sm-de',     sp ? sp.common_name_de : '');
+  sv('sm-class',  sp ? (sp.taxon_class||'Aves') : 'Aves');
+  sv('sm-order',  sp ? sp.taxon_order : '');
+  sv('sm-family', sp ? sp.taxon_family : '');
+  sv('sm-iucn',   sp ? (sp.iucn_status||'') : '');
+  sv('sm-cites',  sp ? (sp.cites_appendix||'') : '');
+  g('sm-eep').checked = sp ? !!parseInt(sp.eep||0) : false;
+  sv('sm-notes',  sp ? sp.notes : '');
+  g('species-overlay').classList.add('open');
+}
+
+async function submitSpecies() {
+  var sci = gv('sm-sci').trim();
+  if (!sci) { alert('Vědecký název je povinný.'); return; }
+  var body = {
+    id: parseInt(gv('sm-id'))||0,
+    scientific_name: sci,
+    common_name_cs:  gv('sm-cs'),
+    common_name_en:  gv('sm-en'),
+    common_name_de:  gv('sm-de'),
+    taxon_class:     gv('sm-class'),
+    taxon_order:     gv('sm-order'),
+    taxon_family:    gv('sm-family'),
+    iucn_status:     gv('sm-iucn'),
+    cites_appendix:  gv('sm-cites'),
+    eep:             g('sm-eep').checked ? 1 : 0,
+    notes:           gv('sm-notes'),
+  };
+  var r = await api('save_species', {}, body);
+  if (r.error) { alert('Chyba: '+r.error); return; }
+  closeModal('species');
+  await loadSpeciesList();
+  if (state.holdingFromSpeciesModal) {
+    sv('hm-species', r.id);
+    g('holding-overlay').classList.add('open');
+  } else {
+    renderSpeciesView();
+  }
+  if (state.selId) selectInst(state.selId);
+  loadStats();
+}
+
+function openInstModal() {
+  g('im-title').textContent = 'Přidat instituci';
+  g('im-mode').value = 'add';
+  ['im-id','im-country','im-subdivision','im-city','im-name','im-aliases','im-web','im-memberships','im-notes'].forEach(function(id){ sv(id,''); });
+  sv('im-type',''); sv('im-eaza','non-EAZA');
+  g('im-id').disabled = false;
+  g('inst-overlay').classList.add('open');
+}
+
+async function submitInst() {
+  var id   = gv('im-id').trim();
+  var name = gv('im-name').trim();
+  var country = gv('im-country').trim();
+  var city    = gv('im-city').trim();
+  if (!id || !name || !country || !city) { alert('Vyplňte povinná pole: ID, Stát, Město, Název.'); return; }
+  var body = {
+    id: id, institution: name, country: country, city: city,
+    subdivision:      gv('im-subdivision'),
+    institution_aliases: gv('im-aliases'),
+    institution_type: gv('im-type'),
+    eaza_status:      gv('im-eaza'),
+    website:          gv('im-web'),
+    other_memberships: gv('im-memberships'),
+    notes:            gv('im-notes'),
+  };
+  var r = await api('add_institution', {}, body);
+  if (r.error) { alert('Chyba: '+r.error); return; }
+  closeModal('inst');
+  await loadCountries();
+  loadInst(1);
+  loadStats();
+}
+
+async function lookupCites() {
+  var name = gv('sm-sci').trim();
+  if (!name) { alert('Nejprve zadejte vědecký název.'); return; }
+  var btn = g('sm-cites-btn');
+  btn.textContent = '…'; btn.disabled = true;
+  var r = await api('cites_lookup', {name: name});
+  btn.textContent = 'Dohledat ›'; btn.disabled = false;
+  if (r.error) { alert('Chyba CITES API: ' + r.error); return; }
+  sv('sm-cites', r.appendix || '');
+  if (!r.appendix) alert('Druh nebyl v CITES databázi nalezen (příloha zůstala prázdná).');
+}
+
+async function citesUpdateAll() {
+  if (!confirm('Aktualizovat CITES přílohu pro všechny druhy v databázi?\n\nMůže to trvat minutu (35 druhů × 0,3 s).')) return;
+  var btn = g('cites-all-btn');
+  btn.textContent = '⏳ Aktualizuji…'; btn.disabled = true;
+  var r = await api('cites_update_all', {});
+  btn.textContent = '↻ Aktualizovat CITES'; btn.disabled = false;
+  if (r.error) { alert('Chyba: ' + r.error); return; }
+  var msg = 'Hotovo — aktualizováno ' + r.updated + ' druhů.';
+  if (r.errors && r.errors.length) msg += '\n\nChyby:\n' + r.errors.join('\n');
+  alert(msg);
+  loadSpeciesList();
+}
+
+function closeModal(which) { g(which+'-overlay').classList.remove('open'); }
+
+['holding-overlay','species-overlay','inst-overlay'].forEach(function(id) {
+  g(id).addEventListener('click', function(e){ if(e.target===this) closeModal(id.replace('-overlay','')); });
+});
+
+init();
+</script>
+</body>
+</html>
