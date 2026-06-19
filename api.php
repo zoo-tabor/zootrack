@@ -309,6 +309,22 @@ function citesApiQuery(string $name, string $token): array {
     curl_close($ch);
 
     if ($err) return ['error' => $err];
+    // Retry once on rate limit
+    if ($status === 429) {
+        sleep(12);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["X-Authentication-Token: $token", "Accept: application/json"],
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $body   = curl_exec($ch);
+        $err    = curl_error($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($err) return ['error' => $err];
+    }
     if ($status !== 200) return ['error' => "API HTTP $status", 'raw' => substr($body, 0, 300)];
 
     $data = json_decode($body, true);
@@ -366,7 +382,7 @@ function citesUpdateAll(PDO $db, array $env): array {
         $db->prepare('UPDATE `zootrack_species` SET cites_appendix=? WHERE id=?')
            ->execute([$res['appendix'], $sp['id']]);
         $updated++;
-        usleep(1200000);
+        usleep(2100000);
     }
     return ['ok' => true, 'updated' => $updated, 'errors' => $errors];
 }
