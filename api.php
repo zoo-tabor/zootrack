@@ -57,6 +57,9 @@ try {
         case 'cites_lookup':   echo json_encode(citesLookup($env));           break;
         case 'cites_update_all': echo json_encode(citesUpdateAll($db,$env)); break;
         case 'changes':        echo json_encode(getChanges($db));             break;
+        case 'geocache_get':   echo json_encode(geocacheGet($db));           break;
+        case 'geocache_save':  echo json_encode(geocacheSave($db,$body));    break;
+        case 'map_institutions': echo json_encode(mapInstitutions($db));     break;
         default:               echo json_encode(['error' => "Unknown action: $action"]);
     }
 } catch (Exception $e) {
@@ -329,6 +332,44 @@ function updateInst(PDO $db, array $body): array {
     $diff = diffFields($oldRow, ['notes'=>$notes], ['notes']);
     logChange($db, 'institution', $id, 'update', $diff ?: null, $oldRow['institution'] ?? $id);
     return ['ok'=>true];
+}
+
+// ── Geocache & Map ────────────────────────────────────────────────────────
+function geocacheGet(PDO $db): array {
+    $rows = $db->query("SELECT city, country, lat, lng, not_found FROM `zootrack_geocache`")->fetchAll();
+    $out = [];
+    foreach ($rows as $r) {
+        $out[$r['country'].'|'.$r['city']] = [
+            'lat'       => $r['lat'] !== null ? (float)$r['lat'] : null,
+            'lng'       => $r['lng'] !== null ? (float)$r['lng'] : null,
+            'not_found' => (bool)$r['not_found'],
+        ];
+    }
+    return $out;
+}
+
+function geocacheSave(PDO $db, array $body): array {
+    $city      = trim($body['city']    ?? '');
+    $country   = trim($body['country'] ?? '');
+    $lat       = isset($body['lat'])   ? (float)$body['lat']   : null;
+    $lng       = isset($body['lng'])   ? (float)$body['lng']   : null;
+    $notFound  = empty($body['lat'])   ? 1 : 0;
+    if (!$city || !$country) return ['error' => 'city and country required'];
+    $db->prepare("
+        INSERT INTO `zootrack_geocache` (city, country, lat, lng, not_found)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE lat=VALUES(lat), lng=VALUES(lng), not_found=VALUES(not_found)
+    ")->execute([$city, $country, $lat, $lng, $notFound]);
+    return ['ok' => true];
+}
+
+function mapInstitutions(PDO $db): array {
+    return $db->query("
+        SELECT i.id, i.institution, i.city, i.country, i.eaza_status, i.institution_type, i.website,
+               (SELECT COUNT(*) FROM `zootrack_holdings` h WHERE h.institution_id=i.id) as holding_count
+        FROM `zootrack_institutions` i
+        ORDER BY i.country, i.city, i.institution
+    ")->fetchAll();
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────

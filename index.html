@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZooTrack</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
 :root {
   --bg:#f2f5f7;--surface:#fff;--s2:#eef2f5;--line:#dce3e8;--line2:#bcc8d0;
@@ -151,6 +156,7 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{backgroun
     <div class="nav">
       <button id="nav-inst" class="active" onclick="switchView('institutions')">Instituce</button>
       <button id="nav-sp"   onclick="switchView('species')">Druhy</button>
+      <button id="nav-map"  onclick="switchView('map')">Mapa</button>
     </div>
     <div class="spacer"></div>
     <div class="topstats" id="topstats"></div>
@@ -247,6 +253,37 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{backgroun
     </div>
     <div class="sp-grid" id="sp-grid"></div>
   </div>
+</div>
+
+<!-- MAP VIEW -->
+<div id="view-map" style="display:none">
+  <div style="padding:14px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--surface);border-bottom:1px solid var(--line)">
+    <span style="font-size:13px;font-weight:700">Mapa institucí</span>
+    <select id="map-f-eaza" onchange="applyMapFilter()" style="font-size:12px">
+      <option value="">Vše (EAZA i non)</option>
+      <option value="EAZA">Jen EAZA</option>
+      <option value="non">Jen non-EAZA</option>
+    </select>
+    <select id="map-f-data" onchange="applyMapFilter()" style="font-size:12px">
+      <option value="">Všechny instituce</option>
+      <option value="1">Jen s daty o druzích</option>
+    </select>
+    <span id="map-count" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+  </div>
+
+  <!-- Progress bar (skrytý dokud neprobíhá geocoding) -->
+  <div id="geo-progress-wrap" style="display:none;padding:10px 20px;background:#fffbea;border-bottom:1px solid #f0e68c">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:600">Dohledávám souřadnice měst…</span>
+      <span id="geo-progress-text" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div style="background:#e0e0e0;border-radius:6px;height:8px;overflow:hidden">
+      <div id="geo-progress-bar" style="height:100%;background:var(--teal);border-radius:6px;width:0%;transition:width .3s"></div>
+    </div>
+    <div id="geo-progress-current" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+  </div>
+
+  <div id="map-el" style="height:calc(100vh - 130px)"></div>
 </div>
 
 <!-- INSTITUTION MODAL -->
@@ -610,9 +647,137 @@ function refreshHoldingSpeciesSelect() {
 function switchView(v) {
   g('view-institutions').style.display = v === 'institutions' ? '' : 'none';
   g('view-species').style.display      = v === 'species'      ? '' : 'none';
+  g('view-map').style.display          = v === 'map'          ? '' : 'none';
   g('nav-inst').classList.toggle('active', v === 'institutions');
   g('nav-sp').classList.toggle('active',   v === 'species');
+  g('nav-map').classList.toggle('active',  v === 'map');
   if (v === 'species') renderSpeciesView();
+  if (v === 'map')     initMap();
+}
+
+// ── MAP ───────────────────────────────────────────────────────────────────
+var mapState = { map: null, cluster: null, allInst: [], geocache: {}, initialized: false, geocoding: false };
+
+async function initMap() {
+  if (mapState.initialized) { applyMapFilter(); return; }
+  mapState.initialized = true;
+
+  // Init Leaflet
+  mapState.map = L.map('map-el').setView([30, 10], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(mapState.map);
+  mapState.cluster = L.markerClusterGroup({ chunkedLoading: true });
+  mapState.map.addLayer(mapState.cluster);
+
+  // Load institutions + geocache in parallel
+  var [inst, cache] = await Promise.all([
+    api('map_institutions', {}),
+    api('geocache_get', {})
+  ]);
+  mapState.allInst  = inst || [];
+  mapState.geocache = cache || {};
+
+  // Find unique city+country pairs not yet cached
+  var seen = {};
+  var toGeocode = [];
+  mapState.allInst.forEach(function(i) {
+    var key = i.country + '|' + i.city;
+    if (!seen[key] && !mapState.geocache[key]) { seen[key] = true; toGeocode.push({city: i.city, country: i.country}); }
+  });
+
+  if (toGeocode.length > 0) {
+    await geocodeBatch(toGeocode);
+  }
+  applyMapFilter();
+}
+
+async function geocodeBatch(pairs) {
+  mapState.geocoding = true;
+  var wrap = g('geo-progress-wrap');
+  var bar  = g('geo-progress-bar');
+  var txt  = g('geo-progress-text');
+  var cur  = g('geo-progress-current');
+  wrap.style.display = '';
+  var total = pairs.length;
+
+  for (var i = 0; i < pairs.length; i++) {
+    var p = pairs[i];
+    txt.textContent = (i + 1) + ' / ' + total;
+    cur.textContent = p.city + ', ' + p.country;
+    bar.style.width = Math.round((i / total) * 100) + '%';
+
+    try {
+      var url = 'https://nominatim.openstreetmap.org/search?city='
+        + encodeURIComponent(p.city) + '&country=' + encodeURIComponent(p.country)
+        + '&format=json&limit=1&accept-language=en';
+      var resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      var data = await resp.json();
+      var lat = data[0] ? parseFloat(data[0].lat) : null;
+      var lng = data[0] ? parseFloat(data[0].lon) : null;
+      var key = p.country + '|' + p.city;
+      mapState.geocache[key] = { lat: lat, lng: lng, not_found: !data[0] };
+      await api('geocache_save', {}, { city: p.city, country: p.country, lat: lat, lng: lng });
+    } catch(e) { /* skip on network error */ }
+
+    // Nominatim rate limit: 1 req/s
+    await new Promise(function(res){ setTimeout(res, 1050); });
+  }
+
+  bar.style.width = '100%';
+  txt.textContent = 'Hotovo';
+  cur.textContent = '';
+  setTimeout(function(){ wrap.style.display = 'none'; }, 1500);
+  mapState.geocoding = false;
+}
+
+function applyMapFilter() {
+  if (!mapState.map) return;
+  var eazaF = gv('map-f-eaza');
+  var dataF = gv('map-f-data');
+
+  var filtered = mapState.allInst.filter(function(i) {
+    if (eazaF === 'EAZA' && !i.eaza_status.startsWith('EAZA')) return false;
+    if (eazaF === 'non'  &&  i.eaza_status.startsWith('EAZA')) return false;
+    if (dataF === '1'    && parseInt(i.holding_count||0) === 0) return false;
+    return true;
+  });
+
+  mapState.cluster.clearLayers();
+
+  // Group by city+country → one popup per location listing all institutions there
+  var byLoc = {};
+  filtered.forEach(function(i) {
+    var key = i.country + '|' + i.city;
+    var geo = mapState.geocache[key];
+    if (!geo || geo.not_found || geo.lat === null) return;
+    if (!byLoc[key]) byLoc[key] = { lat: geo.lat, lng: geo.lng, city: i.city, country: i.country, items: [] };
+    byLoc[key].items.push(i);
+  });
+
+  var markers = [];
+  Object.values(byLoc).forEach(function(loc) {
+    var popupHtml = '<b>' + esc(loc.city) + ', ' + esc(loc.country) + '</b><hr style="margin:4px 0">'
+      + loc.items.map(function(i) {
+          var hc = parseInt(i.holding_count||0);
+          var web = i.website ? ' <a href="'+esc(i.website)+'" target="_blank" rel="noopener">↗</a>' : '';
+          return '<div style="margin:3px 0;font-size:12px">'
+            + esc(i.institution) + web
+            + ' <span style="color:#888;font-size:11px">('+(hc?hc+' druhů':'bez dat')+')</span>'
+            + '</div>';
+        }).join('');
+    var m = L.marker([loc.lat, loc.lng]);
+    m.bindPopup(popupHtml, { maxWidth: 300 });
+    markers.push(m);
+  });
+
+  mapState.cluster.addLayers(markers);
+
+  var shown = Object.values(byLoc).reduce(function(s, l){ return s + l.items.length; }, 0);
+  var notFound = filtered.length - shown;
+  g('map-count').textContent = shown + ' institucí na mapě'
+    + (notFound > 0 ? ' · ' + notFound + ' bez souřadnic' : '');
 }
 
 var IUCN_COL = {EX:'red',EW:'red',CR:'red',EN:'amber',VU:'amber',NT:'blue',LC:'green'};
