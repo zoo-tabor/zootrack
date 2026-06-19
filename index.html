@@ -802,11 +802,49 @@ async function selectInst(id) {
   state.selId = id;
   g('tbody').querySelectorAll('tr').forEach(function(tr){ tr.classList.toggle('sel', tr.dataset.id===id); });
   g('detail').innerHTML = '<div class="d-empty">Načítám…</div>';
-  var r = await api('institution', {id:id});
-  renderDetail(r);
+  var [r, changes] = await Promise.all([
+    api('institution', {id:id}),
+    api('changes', {entity_type:'institution', entity_id:id})
+  ]);
+  renderDetail(r, changes);
 }
 
-function renderDetail(r) {
+var ACTION_LABEL = {create:'Vytvořeno', update:'Upraveno', delete:'Smazáno'};
+var FIELD_LABEL  = {
+  scientific_name:'Vědecký název', common_name_cs:'Název CS', common_name_en:'Název EN',
+  taxon_class:'Třída', iucn_status:'IUCN', cites_appendix:'CITES', eep:'EEP',
+  holding_verdict:'Stav', breeding_verdict:'Chov', confidence:'Spolehlivost',
+  source_type:'Zdroj', evidence_date:'Datum evidence', evidence_summary:'Poznámka ke zdroji',
+  notes:'Poznámky', sex_ratio:'Pohlaví'
+};
+
+function renderChanges(changes) {
+  if (!changes || !changes.length) return '';
+  var rows = changes.slice(0,20).map(function(c) {
+    var dt = c.created_at ? c.created_at.slice(0,16).replace('T',' ') : '';
+    var diffHtml = '';
+    if (c.changes && c.action === 'update') {
+      diffHtml = Object.keys(c.changes).map(function(f) {
+        var pair = c.changes[f];
+        var label = FIELD_LABEL[f] || f;
+        return '<div style="font-size:11px;color:var(--muted);margin-top:2px">'
+          +'<b>'+esc(label)+':</b> '
+          +(pair[0]?'<span style="text-decoration:line-through;opacity:.6">'+esc(String(pair[0]))+'</span> → ':'')
+          +esc(String(pair[1]))+'</div>';
+      }).join('');
+    }
+    var badge = c.action==='create'?'teal':c.action==='delete'?'red':'blue';
+    return '<div style="padding:6px 0;border-bottom:1px solid var(--line)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline">'
+        +'<span>'+chip(badge+' sm', ACTION_LABEL[c.action]||c.action)+'&nbsp;<span style="font-size:12px">'+esc(c.label||'')+'</span></span>'
+        +'<span style="font-size:11px;color:var(--muted)">'+esc(dt)+'</span>'
+      +'</div>'+diffHtml+'</div>';
+  }).join('');
+  return '<hr style="border:none;border-top:1px solid var(--line)">'
+    +'<div class="dsec"><h3>Historie změn</h3>'+rows+'</div>';
+}
+
+function renderDetail(r, changes) {
   if(r.error){g('detail').innerHTML='<div class="d-empty">'+esc(r.error)+'</div>';return;}
   var holdings = r.holdings||[];
   // cache holdings by id so onclick can reference safely
@@ -854,6 +892,7 @@ function renderDetail(r) {
       '<button class="add-btn" onclick="openHoldingModal(null,\''+instDataStr+'\')">+ Přidat druh</button>'+
     '</div>'+
     (r.notes?'<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Poznámky</h3><p class="dtext">'+esc(r.notes)+'</p></div>':'')+
+    renderChanges(changes)+
     '</div>';
 }
 

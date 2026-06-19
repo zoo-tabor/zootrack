@@ -56,6 +56,7 @@ try {
         case 'add_institution':echo json_encode(addInstitution($db,$body));   break;
         case 'cites_lookup':   echo json_encode(citesLookup($env));           break;
         case 'cites_update_all': echo json_encode(citesUpdateAll($db,$env)); break;
+        case 'changes':        echo json_encode(getChanges($db));             break;
         default:               echo json_encode(['error' => "Unknown action: $action"]);
     }
 } catch (Exception $e) {
@@ -201,10 +202,14 @@ function saveSpecies(PDO $db, array $body): array {
                'taxon_class','taxon_order','taxon_family','iucn_status','cites_appendix','eep','notes'];
 
     if ($id > 0) {
+        $old  = $db->prepare("SELECT * FROM `zootrack_species` WHERE id=?");
+        $old->execute([$id]);
+        $oldRow = $old->fetch() ?: [];
         $sets = implode(', ', array_map(function($f){ return "`$f`=:$f"; }, $fields));
         $stmt = $db->prepare("UPDATE `zootrack_species` SET $sets WHERE id=:id");
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
     } else {
+        $oldRow = [];
         $cols = '`' . implode('`,`', $fields) . '`';
         $vals = ':' . implode(',:', $fields);
         $stmt = $db->prepare("INSERT INTO `zootrack_species` ($cols) VALUES ($vals)");
@@ -214,7 +219,10 @@ function saveSpecies(PDO $db, array $body): array {
         else              $stmt->bindValue(":$f", $body[$f] ?? '');
     }
     $stmt->execute();
-    return ['ok'=>true, 'id'=> $id>0 ? $id : (int)$db->lastInsertId()];
+    $newId = $id > 0 ? $id : (int)$db->lastInsertId();
+    $diff  = $id > 0 ? diffFields($oldRow, $body, $fields) : null;
+    logChange($db, 'species', (string)$newId, $id > 0 ? 'update' : 'create', $diff, $sci);
+    return ['ok'=>true, 'id'=>$newId];
 }
 
 // ── Holdings ───────────────────────────────────────────────────────────────
@@ -237,11 +245,15 @@ function saveHolding(PDO $db, array $body): array {
                'evidence_date','evidence_summary','notes'];
 
     if ($id) {
+        $old = $db->prepare("SELECT * FROM `zootrack_holdings` WHERE id=?");
+        $old->execute([$id]);
+        $oldRow = $old->fetch() ?: [];
         $sets = implode(',', array_map(function($f){ return "`$f`=:$f"; }, $fields));
         $stmt = $db->prepare("UPDATE `zootrack_holdings` SET $sets, updated_at=:now WHERE id=:id");
         $stmt->bindValue(':id',  $id,  PDO::PARAM_INT);
         $stmt->bindValue(':now', $now);
     } else {
+        $oldRow = [];
         $af   = array_merge(['institution_id','species_id'], $fields, ['created_at','updated_at']);
         $cols = '`' . implode('`,`', $af) . '`';
         $vals = ':' . implode(',:', $af);
@@ -254,13 +266,22 @@ function saveHolding(PDO $db, array $body): array {
     foreach ($fields as $f) $stmt->bindValue(":$f", $body[$f] ?? '');
     $stmt->execute();
     if (!$id) $id = (int)$db->lastInsertId();
+    $spName = $db->prepare("SELECT scientific_name FROM `zootrack_species` WHERE id=?");
+    $spName->execute([$sid]);
+    $label = ($spName->fetchColumn() ?: "species#$sid").' @ '.$iid;
+    $diff  = $oldRow ? diffFields($oldRow, $body, $fields) : null;
+    logChange($db, 'holding', (string)$id, $oldRow ? 'update' : 'create', $diff, $label);
     return ['ok'=>true, 'id'=>$id];
 }
 
 function deleteHolding(PDO $db, array $body): array {
     $id = (int)($body['id'] ?? 0);
     if (!$id) return ['error'=>'id required'];
+    $row = $db->prepare("SELECT h.institution_id, s.scientific_name FROM `zootrack_holdings` h JOIN `zootrack_species` s ON h.species_id=s.id WHERE h.id=?");
+    $row->execute([$id]);
+    $info = $row->fetch();
     $db->prepare('DELETE FROM `zootrack_holdings` WHERE id=?')->execute([$id]);
+    logChange($db, 'holding', (string)$id, 'delete', null, $info ? $info['scientific_name'].' @ '.$info['institution_id'] : "holding#$id");
     return ['ok'=>true];
 }
 
@@ -292,6 +313,7 @@ function addInstitution(PDO $db, array $body): array {
         trim($body['other_memberships'] ?? ''),
         trim($body['notes'] ?? ''),
     ]);
+    logChange($db, 'institution', $id, 'create', null, "$institution, $country");
     return ['ok' => true, 'id' => $id];
 }
 
@@ -299,9 +321,55 @@ function updateInst(PDO $db, array $body): array {
     $id    = trim($body['id'] ?? '');
     $notes = trim($body['notes'] ?? '');
     if (!$id) return ['error'=>'id required'];
+    $old = $db->prepare("SELECT notes, institution FROM `zootrack_institutions` WHERE id=?");
+    $old->execute([$id]);
+    $oldRow = $old->fetch() ?: [];
     $db->prepare("UPDATE `zootrack_institutions` SET notes=?, updated_at=NOW() WHERE id=?")
        ->execute([$notes, $id]);
+    $diff = diffFields($oldRow, ['notes'=>$notes], ['notes']);
+    logChange($db, 'institution', $id, 'update', $diff ?: null, $oldRow['institution'] ?? $id);
     return ['ok'=>true];
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────
+function logChange(PDO $db, string $type, string $entityId, string $action, ?array $changes, string $label): void {
+    $db->prepare("
+        INSERT INTO `zootrack_changes` (entity_type, entity_id, action, changes, label)
+        VALUES (?, ?, ?, ?, ?)
+    ")->execute([$type, $entityId, $action, $changes ? json_encode($changes, JSON_UNESCAPED_UNICODE) : null, $label]);
+}
+
+function diffFields(array $old, array $new, array $fields): array {
+    $diff = [];
+    foreach ($fields as $f) {
+        $ov = (string)($old[$f] ?? '');
+        $nv = (string)($new[$f] ?? '');
+        if ($ov !== $nv) $diff[$f] = [$ov, $nv];
+    }
+    return $diff;
+}
+
+function getChanges(PDO $db): array {
+    $type = trim($_GET['entity_type'] ?? '');
+    $id   = trim($_GET['entity_id']   ?? '');
+    $sql  = "SELECT id, entity_type, entity_id, action, changes, label, created_at
+             FROM `zootrack_changes`";
+    $params = [];
+    if ($type && $id) {
+        $sql   .= " WHERE entity_type=? AND entity_id=?";
+        $params = [$type, $id];
+    } elseif ($type) {
+        $sql   .= " WHERE entity_type=?";
+        $params = [$type];
+    }
+    $sql .= " ORDER BY created_at DESC LIMIT 100";
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['changes'] = $r['changes'] ? json_decode($r['changes'], true) : null;
+    }
+    return $rows;
 }
 
 // ── CITES ──────────────────────────────────────────────────────────────────
