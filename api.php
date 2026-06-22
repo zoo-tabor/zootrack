@@ -321,17 +321,34 @@ function addInstitution(PDO $db, array $body): array {
 }
 
 function updateInst(PDO $db, array $body): array {
-    $id    = trim($body['id'] ?? '');
-    $notes = trim($body['notes'] ?? '');
+    $id = trim($body['id'] ?? '');
     if (!$id) return ['error'=>'id required'];
-    $old = $db->prepare("SELECT notes, institution FROM `zootrack_institutions` WHERE id=?");
+
+    $fields = ['institution','city','subdivision','country','institution_type',
+                'eaza_status','website','other_memberships',
+                'last_contact_date','contact_notes','notes'];
+    $boolFields = ['animals_from_them','animals_at_them'];
+
+    $old = $db->prepare("SELECT * FROM `zootrack_institutions` WHERE id=?");
     $old->execute([$id]);
     $oldRow = $old->fetch() ?: [];
-    $db->prepare("UPDATE `zootrack_institutions` SET notes=?, updated_at=NOW() WHERE id=?")
-       ->execute([$notes, $id]);
-    $diff = diffFields($oldRow, ['notes'=>$notes], ['notes']);
+
+    $sets = implode(', ', array_map(fn($f) => "`$f`=:$f", array_merge($fields, $boolFields)));
+    $stmt = $db->prepare("UPDATE `zootrack_institutions` SET $sets, updated_at=NOW() WHERE id=:id");
+    $stmt->bindValue(':id', $id);
+    foreach ($fields as $f) {
+        $val = trim($body[$f] ?? '');
+        $stmt->bindValue(":$f", $val === '' ? null : $val);
+    }
+    foreach ($boolFields as $f) {
+        $stmt->bindValue(":$f", empty($body[$f]) ? 0 : 1, PDO::PARAM_INT);
+    }
+    $stmt->execute();
+
+    $allFields = array_merge($fields, $boolFields);
+    $diff = diffFields($oldRow, $body, $allFields);
     logChange($db, 'institution', $id, 'update', $diff ?: null, $oldRow['institution'] ?? $id);
-    return ['ok'=>true];
+    return ['ok' => true];
 }
 
 // ── Geocache & Map ────────────────────────────────────────────────────────

@@ -1039,26 +1039,116 @@ function renderDetail(r, changes) {
     '</div>';
   }).join('');
 
-  var webLink = r.website ? '<a href="'+esc(r.website)+'" target="_blank" rel="noopener" class="link-sm">'+esc(r.website)+'</a>' : '';
+  state.instDetail = r;
+  var webLink    = r.website ? '<a href="'+esc(r.website)+'" target="_blank" rel="noopener" class="link-sm">'+esc(r.website)+'</a>' : '';
   var instDataStr = esc(r.id);
+
+  var contactSec = '';
+  if (r.last_contact_date || r.contact_notes || r.animals_from_them || r.animals_at_them) {
+    contactSec = '<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Kontakt &amp; vztah</h3>'
+      + (r.last_contact_date ? '<div style="font-size:12px;margin-bottom:4px">Poslední kontakt: <b>'+esc(r.last_contact_date)+'</b></div>' : '')
+      + (r.contact_notes ? '<p class="dtext">'+esc(r.contact_notes)+'</p>' : '')
+      + (parseInt(r.animals_from_them||0) ? chip('teal sm','Máme od nich zvířata') : '')
+      + ' '
+      + (parseInt(r.animals_at_them||0)   ? chip('violet sm','Mají od nás zvířata') : '')
+      + '</div>';
+  }
+
   g('detail').innerHTML =
     '<div class="d-body">'+
-    '<div>'+
-      '<div class="d-id">'+esc(r.id)+'</div>'+
-      '<div class="d-name">'+esc(r.institution)+'</div>'+
-      '<div class="d-loc">'+esc(r.city)+(r.subdivision?', '+esc(r.subdivision):'')+', '+esc(r.country)+'</div>'+
-      '<div class="crow" style="margin-top:6px">'+eazaChip(r.eaza_status)+(r.institution_type?chip('gray sm',r.institution_type):'')+'</div>'+
-      (webLink?'<div style="margin-top:6px">'+webLink+'</div>':'')+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+      '<div>'+
+        '<div class="d-id">'+esc(r.id)+'</div>'+
+        '<div class="d-name">'+esc(r.institution)+'</div>'+
+        '<div class="d-loc">'+esc(r.city)+(r.subdivision?', '+esc(r.subdivision):'')+', '+esc(r.country)+'</div>'+
+        '<div class="crow" style="margin-top:6px">'+eazaChip(r.eaza_status)+(r.institution_type?' '+chip('gray sm',r.institution_type):'')+'</div>'+
+        (webLink?'<div style="margin-top:6px">'+webLink+'</div>':'')+
+      '</div>'+
+      '<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;white-space:nowrap;flex-shrink:0" onclick="toggleInstEdit()">&#x270E; Upravit</button>'+
     '</div>'+
+
+    // ── EDIT FORM (skrytý) ──
+    '<div id="inst-edit-form" style="display:none;margin-top:10px">'+
+      '<div class="fgroup"><label>Název instituce</label><input id="ie-name" value="'+esc(r.institution||'')+'"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div class="fgroup"><label>Město</label><input id="ie-city" value="'+esc(r.city||'')+'"></div>'+
+        '<div class="fgroup"><label>Kraj / spolková země</label><input id="ie-sub" value="'+esc(r.subdivision||'')+'"></div>'+
+      '</div>'+
+      '<div class="fgroup"><label>Stát</label><input id="ie-country" value="'+esc(r.country||'')+'"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div class="fgroup"><label>Typ instituce</label><input id="ie-type" value="'+esc(r.institution_type||'')+'"></div>'+
+        '<div class="fgroup"><label>EAZA status</label>'+
+          '<select id="ie-eaza">'+
+            ['EAZA - Full member','EAZA - Candidate member','EAZA - Associate member','non-EAZA'].map(function(o){
+              return '<option value="'+o+'"'+(r.eaza_status===o?' selected':'')+'>'+o+'</option>';
+            }).join('')+
+          '</select>'+
+        '</div>'+
+      '</div>'+
+      '<div class="fgroup"><label>Web</label><input id="ie-web" type="url" value="'+esc(r.website||'')+'"></div>'+
+      '<hr style="border:none;border-top:1px solid var(--line);margin:8px 0">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div class="fgroup"><label>Poslední kontakt</label><input id="ie-contact-date" type="date" value="'+esc(r.last_contact_date||'')+'"></div>'+
+        '<div class="fgroup" style="align-self:end;padding-bottom:4px">'+
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">'+
+            '<input type="checkbox" id="ie-from-them"'+(parseInt(r.animals_from_them||0)?' checked':'')+'>'+
+            'Máme od nich zvířata'+
+          '</label>'+
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:6px">'+
+            '<input type="checkbox" id="ie-at-them"'+(parseInt(r.animals_at_them||0)?' checked':'')+'>'+
+            'Mají od nás zvířata'+
+          '</label>'+
+        '</div>'+
+      '</div>'+
+      '<div class="fgroup"><label>Poznámka ke kontaktu</label><textarea id="ie-contact-notes" rows="2" style="resize:vertical">'+esc(r.contact_notes||'')+'</textarea></div>'+
+      '<div class="fgroup"><label>Poznámky obecné</label><textarea id="ie-notes" rows="3" style="resize:vertical">'+esc(r.notes||'')+'</textarea></div>'+
+      '<div style="display:flex;gap:8px;margin-top:4px">'+
+        '<button class="btn btn-primary" onclick="saveInstDetail()">Uložit</button>'+
+        '<button class="btn btn-ghost" onclick="toggleInstEdit()">Zrušit</button>'+
+      '</div>'+
+    '</div>'+
+
     '<hr style="border:none;border-top:1px solid var(--line)">'+
+    contactSec+
     '<div class="dsec">'+
       '<h3>Záznamy o druzích ('+holdings.length+')</h3>'+
       (hHtml||'<p class="dtext" style="color:var(--muted)">Zatím žádné záznamy.</p>')+
       '<button class="add-btn" onclick="openHoldingModal(null,\''+instDataStr+'\')">+ Přidat druh</button>'+
     '</div>'+
-    (r.notes?'<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Poznámky</h3><p class="dtext">'+esc(r.notes)+'</p></div>':'')+
+    (r.notes&&!r.contact_notes?'<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Poznámky</h3><p class="dtext">'+esc(r.notes)+'</p></div>':'')+
     renderChanges(changes)+
     '</div>';
+}
+
+function toggleInstEdit() {
+  var f = g('inst-edit-form');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+async function saveInstDetail() {
+  var r = state.instDetail;
+  if (!r) return;
+  var body = {
+    id:                r.id,
+    institution:       document.getElementById('ie-name').value,
+    city:              document.getElementById('ie-city').value,
+    subdivision:       document.getElementById('ie-sub').value,
+    country:           document.getElementById('ie-country').value,
+    institution_type:  document.getElementById('ie-type').value,
+    eaza_status:       document.getElementById('ie-eaza').value,
+    website:           document.getElementById('ie-web').value,
+    last_contact_date: document.getElementById('ie-contact-date').value,
+    contact_notes:     document.getElementById('ie-contact-notes').value,
+    notes:             document.getElementById('ie-notes').value,
+    animals_from_them: document.getElementById('ie-from-them').checked ? 1 : 0,
+    animals_at_them:   document.getElementById('ie-at-them').checked   ? 1 : 0,
+    other_memberships: r.other_memberships || '',
+  };
+  var res = await api('update_inst', {}, body);
+  if (res.error) { alert('Chyba: ' + res.error); return; }
+  selectInst(r.id);
+  loadInst(state.page);
+}
 }
 
 function openHoldingById(hid) {
