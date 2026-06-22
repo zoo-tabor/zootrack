@@ -333,7 +333,7 @@ function updateInst(PDO $db, array $body): array {
     $old->execute([$id]);
     $oldRow = $old->fetch() ?: [];
 
-    $sets = implode(', ', array_map(fn($f) => "`$f`=:$f", array_merge($fields, $boolFields)));
+    $sets = implode(', ', array_map(function($f){ return "`$f`=:$f"; }, array_merge($fields, $boolFields)));
     $stmt = $db->prepare("UPDATE `zootrack_institutions` SET $sets, updated_at=NOW() WHERE id=:id");
     $stmt->bindValue(':id', $id);
     foreach ($fields as $f) {
