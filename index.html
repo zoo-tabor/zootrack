@@ -565,7 +565,8 @@ async function api(action, params, body) {
   var url = new URL('api.php', window.location.href);
   url.searchParams.set('action', action);
   for (var k in (params||{})) { if (params[k]!==''&&params[k]!==null&&params[k]!==undefined) url.searchParams.set(k, params[k]); }
-  var opts = {};
+  url.searchParams.set('_t', Date.now()); // cache-busting – unikátní URL obejde proxy/HTTP cache
+  var opts = { cache: 'no-store' };
   if (body) { opts.method='POST'; opts.headers={'Content-Type':'application/json'}; opts.body=JSON.stringify(body); }
   return (await fetch(url, opts)).json();
 }

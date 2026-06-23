@@ -3,6 +3,12 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
+// Zabránit cachování API odpovědí (LiteSpeed na WEDOSu + HTTP cache prohlížeče),
+// jinak GET po uložení vrací starou JSON odpověď a UI neukáže provedené změny.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+header('X-LiteSpeed-Cache-Control: no-cache');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
 // ── DB connection (MariaDB) ─────────────────────────────────────────────────
