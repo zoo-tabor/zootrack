@@ -132,6 +132,22 @@ tbody tr{cursor:pointer}tbody tr:hover{background:#f7fafb}tbody tr.sel{backgroun
 .cb-row input[type=checkbox]{width:16px;height:16px;cursor:pointer}
 .sp-select-row{display:flex;gap:8px}
 .sp-select-row select{flex:1}
+.sp-select-row .combo{flex:1}
+
+/* Searchable select (combobox) – vypadá jako select, ale lze do něj psát a filtrovat */
+.combo{position:relative;width:100%}
+.combo-input{width:100%;min-height:34px;border:1px solid var(--line2);border-radius:6px;padding:7px 24px 7px 9px;background:#fff;color:var(--text);cursor:text}
+.combo-input:focus{outline:none;border-color:var(--teal)}
+.combo-input:disabled{opacity:.45;cursor:not-allowed;background:var(--s2)}
+.combo-input::placeholder{color:var(--muted)}
+.combo::after{content:"";position:absolute;right:10px;top:18px;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--muted);pointer-events:none}
+.combo.open .combo-input{border-color:var(--teal);border-bottom-left-radius:0;border-bottom-right-radius:0}
+.combo-list{position:absolute;z-index:200;left:0;right:0;top:100%;max-height:240px;overflow-y:auto;background:#fff;border:1px solid var(--teal);border-top:none;border-radius:0 0 6px 6px;box-shadow:var(--shadow);display:none}
+.combo.open .combo-list{display:block}
+.combo-opt{padding:7px 9px;font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.combo-opt:hover,.combo-opt.active{background:var(--teal2)}
+.combo-opt.sel{font-weight:600}
+.combo-empty{padding:7px 9px;font-size:12px;color:var(--muted)}
 .nav{display:flex;gap:2px;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden;background:var(--s2)}
 .nav button{border:none;background:transparent;padding:6px 16px;font-weight:600;font-size:13px;color:var(--muted)}
 .nav button.active{background:var(--teal);color:#fff}
@@ -574,7 +590,7 @@ async function api(action, params, body) {
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function g(id) { return document.getElementById(id); }
 function gv(id) { return g(id).value; }
-function sv(id,v) { g(id).value = v||''; }
+function sv(id,v) { var el = g(id); el.value = v||''; comboRefresh(el); }
 
 var HLBL = {confirmed_current:'Potvrzena',likely_current:'Pravděpodobná',historical:'Historicky',not_current:'Nepřítomni',unclear:'Nejasná',unknown:'Neznámo'};
 var BLBL = {confirmed:'Potvrzen odchov',likely:'Pravděpodobný',no_evidence:'Bez evidence',historical:'Historicky',unknown:'Neznámo'};
@@ -590,9 +606,69 @@ function bchip(v) { return chip(BCOL[v]||'gray', BLBL[v]||v||'–'); }
 function cchip(v) { return chip(CCOL[v]||'gray', CLBL[v]||v||'–'); }
 function eazaChip(v) { return (!v) ? chip('gray','?') : (v.indexOf('EAZA')===0 ? chip('teal','EAZA') : chip('gray','non-EAZA')); }
 
+// ── Searchable select (combobox) ──────────────────────────────────────────
+// Z nativního <select> udělá pole, do kterého lze psát a filtrovat položky,
+// ale select zůstává zdrojem hodnoty – takže gv()/sv()/onchange fungují beze změny.
+function comboNorm(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+
+function enhanceSelect(sel){
+  if (sel._combo) return;                          // už převedeno
+  var wrap  = document.createElement('div'); wrap.className = 'combo';
+  var input = document.createElement('input');
+  input.type = 'text'; input.className = 'combo-input';
+  input.autocomplete = 'off'; input.spellcheck = false;
+  var list  = document.createElement('div'); list.className = 'combo-list';
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel); wrap.appendChild(input); wrap.appendChild(list);
+  sel.style.display = 'none';
+  var combo = { input:input, list:list, active:-1 };
+  sel._combo = combo;
+
+  function curLabel(){ var o = sel.options[sel.selectedIndex]; return (o && o.value!=='') ? o.textContent : ''; }
+  function placeholder(){ for (var i=0;i<sel.options.length;i++){ if(sel.options[i].value==='') return sel.options[i].textContent.trim(); } return 'Vyberte…'; }
+  function render(filter){
+    var f = comboNorm(filter); list.innerHTML = ''; var shown = 0;
+    for (var i=0;i<sel.options.length;i++){
+      var o = sel.options[i], txt = o.textContent;
+      if (o.value==='' && txt.trim()==='') continue;
+      if (f && comboNorm(txt).indexOf(f) === -1) continue;
+      var item = document.createElement('div');
+      item.className = 'combo-opt' + (i===sel.selectedIndex?' sel':'');
+      item.textContent = txt; item.dataset.idx = i;
+      list.appendChild(item); shown++;
+    }
+    if (!shown){ var e=document.createElement('div'); e.className='combo-empty'; e.textContent='Nic nenalezeno'; list.appendChild(e); }
+    combo.active = -1;
+  }
+  function open(){ if (sel.disabled) return; render(''); input.select(); wrap.classList.add('open'); }
+  function close(){ wrap.classList.remove('open'); input.value = curLabel(); }
+  function choose(idx){ sel.selectedIndex = idx; input.value = curLabel(); wrap.classList.remove('open'); sel.dispatchEvent(new Event('change',{bubbles:true})); }
+  function markActive(opts){ opts.forEach(function(o,i){ o.classList.toggle('active', i===combo.active); }); if (combo.active>=0 && opts[combo.active]) opts[combo.active].scrollIntoView({block:'nearest'}); }
+
+  input.addEventListener('focus', open);
+  input.addEventListener('mousedown', function(){ if(!wrap.classList.contains('open')) open(); });
+  input.addEventListener('input', function(){ wrap.classList.add('open'); render(input.value); });
+  input.addEventListener('keydown', function(e){
+    var opts = list.querySelectorAll('.combo-opt');
+    if (e.key==='ArrowDown'){ e.preventDefault(); if(!wrap.classList.contains('open'))open(); combo.active=Math.min(opts.length-1,combo.active+1); markActive(opts); }
+    else if (e.key==='ArrowUp'){ e.preventDefault(); combo.active=Math.max(0,combo.active-1); markActive(opts); }
+    else if (e.key==='Enter'){ if(wrap.classList.contains('open')&&combo.active>=0){ e.preventDefault(); choose(parseInt(opts[combo.active].dataset.idx)); } }
+    else if (e.key==='Escape'){ close(); input.blur(); }
+  });
+  list.addEventListener('mousedown', function(e){ var it=e.target.closest('.combo-opt'); if(!it)return; e.preventDefault(); choose(parseInt(it.dataset.idx)); });
+  input.addEventListener('blur', function(){ setTimeout(close, 150); });
+
+  combo.refresh = function(){ input.value = curLabel(); input.placeholder = placeholder(); input.disabled = sel.disabled; };
+  new MutationObserver(combo.refresh).observe(sel, { attributes:true, attributeFilter:['disabled'], childList:true });
+  combo.refresh();
+}
+function comboRefresh(sel){ if (sel && sel._combo) sel._combo.refresh(); }
+function enhanceAllSelects(root){ (root||document).querySelectorAll('select').forEach(enhanceSelect); }
+
 async function init() {
   await Promise.all([loadStats(), loadCountries(), loadSpeciesList()]);
   loadInst(1);
+  enhanceAllSelects();                 // statické <select> (filtry + modály) → vyhledávací
   document.querySelectorAll('th.sortable').forEach(function(th) {
     th.addEventListener('click', function() {
       var col = th.dataset.col;
@@ -1119,6 +1195,8 @@ function renderDetail(r, changes) {
     (r.notes&&!r.contact_notes?'<hr style="border:none;border-top:1px solid var(--line)"><div class="dsec"><h3>Poznámky</h3><p class="dtext">'+esc(r.notes)+'</p></div>':'')+
     renderChanges(changes)+
     '</div>';
+
+  enhanceAllSelects(g('detail'));      // EAZA select v edit formuláři → vyhledávací
 }
 
 function toggleInstEdit() {
