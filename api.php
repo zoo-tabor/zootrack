@@ -50,6 +50,14 @@ if ($method === 'POST') {
 
 $action = $_GET['action'] ?? $body['action'] ?? '';
 
+// Data-mutating actions require ZooTrack edit permission (admin or users.zootrack_edit).
+// Reads and geocache_save (needed for the map) stay at login level; cites_update_all
+// keeps its own admin-only check inside the switch.
+$writeActions = ['save_species', 'save_holding', 'delete_holding', 'update_inst', 'add_institution'];
+if (in_array($action, $writeActions, true)) {
+    zt_require_edit_api();
+}
+
 try {
     switch ($action) {
         case 'stats':          echo json_encode(getStats($db));               break;

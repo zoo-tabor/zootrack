@@ -23,6 +23,22 @@ function zt_is_admin() {
     return ($_SESSION['role'] ?? '') === 'admin';
 }
 
+/** Can the current user modify ZooTrack data? Admin always; otherwise the global
+ *  users.zootrack_edit flag captured into the session by VetApp at login. */
+function zt_can_edit() {
+    return zt_is_admin() || !empty($_SESSION['zootrack_edit']);
+}
+
+/** Gate a write API action: 403 for users without ZooTrack edit permission. */
+function zt_require_edit_api() {
+    if (!zt_can_edit()) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['error' => 'forbidden — ZooTrack edit permission required']);
+        exit;
+    }
+}
+
 /** Gate an HTML page: redirect unauthenticated visitors to the VetApp login page. */
 function zt_require_login_page() {
     if (zt_user_id() === null) {
