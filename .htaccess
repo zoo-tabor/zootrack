@@ -1,0 +1,22 @@
+# ZooTrack — minimal hardening for /zootrack/.
+# WEDOS / LiteSpeed safe: only FilesMatch / Files / Options / DirectoryIndex
+# (no php_flag / php_value, which WEDOS blocks).
+
+# Deny direct web access to sensitive / raw files: .env, sqlite seeds, dev scripts, docs.
+<FilesMatch "\.(env|sqlite|db|py|md|ini|log|sh|bak)$">
+    Require all denied
+</FilesMatch>
+
+# Deny any dotfile (.env, .htaccess, .gitignore, …).
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# The SPA markup is served ONLY through index.php (the auth gate), never directly.
+<Files "app.html">
+    Require all denied
+</Files>
+
+# No directory listing; index.php is the entry point (auth gate).
+Options -Indexes
+DirectoryIndex index.php

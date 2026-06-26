@@ -1,15 +1,18 @@
 <?php
+// Require an authenticated VetApp session for the entire ZooTrack API.
+// The SPA is same-origin (vetapp.zootabor.eu/zootrack), so cookies are sent
+// automatically and no CORS headers are needed.
+require __DIR__ . '/auth_check.php';
+
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 // Zabránit cachování API odpovědí (LiteSpeed na WEDOSu + HTTP cache prohlížeče),
 // jinak GET po uložení vrací starou JSON odpověď a UI neukáže provedené změny.
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 header('X-LiteSpeed-Cache-Control: no-cache');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
+
+zt_require_login_api();
 
 // ── DB connection (MariaDB) ─────────────────────────────────────────────────
 
@@ -61,7 +64,10 @@ try {
         case 'update_inst':    echo json_encode(updateInst($db,$body));       break;
         case 'add_institution':echo json_encode(addInstitution($db,$body));   break;
         case 'cites_lookup':   echo json_encode(citesLookup($env));           break;
-        case 'cites_update_all': echo json_encode(citesUpdateAll($db,$env)); break;
+        case 'cites_update_all':
+            if (!zt_is_admin()) { http_response_code(403); echo json_encode(['error' => 'forbidden — admin only']); break; }
+            echo json_encode(citesUpdateAll($db,$env));
+            break;
         case 'changes':        echo json_encode(getChanges($db));             break;
         case 'geocache_get':   echo json_encode(geocacheGet($db));           break;
         case 'geocache_save':  echo json_encode(geocacheSave($db,$body));    break;
